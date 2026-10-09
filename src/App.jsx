@@ -39,7 +39,7 @@ export default function App() {
   // === ESTADOS DE GESTÃO ===
   const [newTeamName, setNewTeamName] = useState('');
   const [editingPlayerId, setEditingPlayerId] = useState(null);
-  const [expandedPlayers, setExpandedPlayers] = useState([]); // NOVO: Controle de sanfona (lista oculta)
+  const [expandedPlayers, setExpandedPlayers] = useState([]); 
   const [novoJogador, setNovoJogador] = useState({ 
     nome: '', time_nome: '', categoria: '', posicao: '', 
     altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' 
@@ -635,8 +635,8 @@ export default function App() {
                   <div className="col-span-2 text-center text-gray-500 py-10 bg-gray-900 rounded-xl">Nenhum jogador encontrado com os filtros selecionados.</div>
                 ) : (
                   displayedPlayers.map(player => (
-                    <div key={player.id} className={`bg-gray-900 p-4 rounded-xl border transition ${editingPlayerId === player.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
-                      {/* O cabeçalho do cartão do jogador (clicável para expandir) */}
+                    // ADICIONADA A CLASSE "h-fit" AQUI PARA NÃO ESTICAR O CARTÃO DA BIANCA
+                    <div key={player.id} className={`bg-gray-900 p-4 rounded-xl border transition h-fit ${editingPlayerId === player.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
                       <div 
                         className="flex justify-between items-start cursor-pointer hover:bg-gray-800/50 p-2 -m-2 rounded transition"
                         onClick={() => toggleExpandPlayer(player.id)}
@@ -644,7 +644,6 @@ export default function App() {
                         <div>
                           <h4 className="text-lg font-bold flex items-center gap-2">
                             {player.nome}
-                            {/* stopPropagation evita que abrir o modo de edição feche a sanfona acidentalmente */}
                             <button onClick={(e) => { e.stopPropagation(); handleEditClick(player); }} className="text-blue-500 hover:text-blue-400 p-1" title={editingPlayerId === player.id ? "Concluir Edição" : "Editar Estatísticas e Info"}>✏️</button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id, player.nome); }} className="text-red-500 hover:text-red-400 p-1">🗑️</button>
                           </h4>
@@ -653,14 +652,12 @@ export default function App() {
                         <div className="text-right text-xs text-gray-400 flex flex-col items-end">
                           <p>{getIdade(player.ano_nascimento)}{player.altura}m | {player.pe_dominante}</p>
                           <p>Fat: {player.percentual_gordura}% | Max: {player.velocidade_maxima}km/h</p>
-                          {/* Indicador visual de ocultar/mostrar */}
                           <span className="text-blue-500 font-bold mt-2 text-xs">
                             {expandedPlayers.includes(player.id) || editingPlayerId === player.id ? 'Ocultar ▲' : 'Ver Ações ▼'}
                           </span>
                         </div>
                       </div>
                       
-                      {/* LÓGICA DE OCULTAR: Mostra apenas se clicado OU se estiver em modo de edição (Lápis) */}
                       {(expandedPlayers.includes(player.id) || editingPlayerId === player.id) && (
                         <div className="grid grid-cols-1 gap-1 mt-3 pt-3 border-t border-gray-800/50">
                           {ACOES_TATICAS.map(acao => (
