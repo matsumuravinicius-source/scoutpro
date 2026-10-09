@@ -38,20 +38,28 @@ export default function App() {
     altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' 
   });
 
+  // === ESTADOS DO MODO JOGO (LIVE) ===
   const [matchSquadIds, setMatchSquadIds] = useState([]);
   const [isMatchActive, setIsMatchActive] = useState(false);
   const [matchTitle, setMatchTitle] = useState('');
   const [matchStats, setMatchStats] = useState({});
   const [expandedMatch, setExpandedMatch] = useState(null);
 
+  // === ESTADOS DO CRONÓMETRO E EVENTOS ===
+  const [matchTime, setMatchTime] = useState(0); // em segundos
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [currentPeriod, setCurrentPeriod] = useState(1); // Máximo 4
+  const [periodLogs, setPeriodLogs] = useState([]); // Guarda duração dos tempos
+  const [matchEventLog, setMatchEventLog] = useState([]); // Guarda linha do tempo de ações
+
   // === ESTADOS DE EDIÇÃO DE PARTIDA (HISTÓRICO) ===
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [editMatchData, setEditMatchData] = useState(null);
 
+  // === ESTADOS DE ANÁLISE ===
   const [rankMetric, setRankMetric] = useState('gols');
   const [compareA, setCompareA] = useState('');
   const [compareB, setCompareB] = useState('');
-
   const [savedMetrics, setSavedMetrics] = useState(() => {
     const localData = localStorage.getItem('scoutpro_custom_metrics');
     return localData ? JSON.parse(localData) : [
@@ -62,6 +70,7 @@ export default function App() {
   const [novaMetrica, setNovaMetrica] = useState({ nome: '', numerador: '', denominador: '' });
   const [selectedMetricId, setSelectedMetricId] = useState(savedMetrics[0]?.id || null);
 
+  // === EFEITOS (Auth & Cronómetro) ===
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
@@ -72,6 +81,22 @@ export default function App() {
     if (session) buscarDados();
   }, [session]);
 
+  // Efeito do Cronómetro
+  useEffect(() => {
+    let interval;
+    if (isTimerRunning) {
+      interval = setInterval(() => setMatchTime(prev => prev + 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
+
+  const formatTime = (totalSeconds) => {
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const s = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // === AUTENTICAÇÃO ===
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -88,9 +113,9 @@ export default function App() {
     if (error) setAuthError(error.message);
     setAuthLoading(false);
   };
-
   const handleLogout = async () => await supabase.auth.signOut();
 
+  // === BASE DE DADOS ===
   async function buscarDados() {
     const { data: timesData } = await supabase.from('times').select('nome');
     if (timesData) setTeams(timesData.map(t => t.nome));
@@ -104,22 +129,18 @@ export default function App() {
       });
       setPlayers(jogadoresFormatados);
     }
-
     const { data: partidasData } = await supabase.from('partidas').select('*').order('criado_em', { ascending: false });
     if (partidasData) setMatchHistory(partidasData);
   }
 
-  // === FUNÇÕES DA BASE DE DADOS DE ATLETAS ===
   const handleSavePlayer = async (e) => {
     e.preventDefault();
     const payload = {
       nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria,
       posicao: novoJogador.posicao, pe_dominante: novoJogador.pe_dominante,
       altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, 
-      velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0,
-      ano_nascimento: parseInt(novoJogador.ano_nascimento) || null,
+      velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null,
     };
-
     if (editingPlayerId) {
       const { data, error } = await supabase.from('jogadores').update(payload).eq('id', editingPlayerId).select();
       if (!error && data) {
@@ -147,14 +168,13 @@ export default function App() {
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
   const cancelarEdicao = () => {
     setEditingPlayerId(null);
     setNovoJogador({ nome: '', time_nome: '', categoria: 'Principal', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
   };
 
   const handleDeletePlayer = async (playerId, playerName) => {
-    if (window.confirm(`Tem certeza que deseja excluir o atleta "${playerName}"? Esta ação não pode ser desfeita.`)) {
+    if (window.confirm(`Excluir permanentemente o atleta "${playerName}"?`)) {
       const { error } = await supabase.from('jogadores').delete().eq('id', playerId);
       if (!error) {
         setPlayers(players.filter(p => p.id !== playerId));
@@ -163,32 +183,26 @@ export default function App() {
     }
   };
 
+  const handleSetGlobalAction = async (playerId, actionId, value) => {
+    const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0);
+    const player = players.find(p => p.id === playerId);
+    const novasAcoesGlobais = { ...player.acoes, [actionId]: rawValue };
+    setPlayers(players.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p));
+    if (typeof rawValue === 'number') await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
+  };
   const handleUpdateGlobalActions = async (playerId, actionId, incrementValue) => {
     const player = players.find(p => p.id === playerId);
     const currentVal = parseInt(player.acoes[actionId]) || 0;
     const novoValor = Math.max(0, currentVal + incrementValue);
     const novasAcoesGlobais = { ...player.acoes, [actionId]: novoValor };
-
     setPlayers(players.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p));
     await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
   };
 
-  const handleSetGlobalAction = async (playerId, actionId, value) => {
-    const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0);
-    const player = players.find(p => p.id === playerId);
-    const novasAcoesGlobais = { ...player.acoes, [actionId]: rawValue };
-
-    setPlayers(players.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p));
-    if (typeof rawValue === 'number') {
-      await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
-    }
-  };
-
-  // === FUNÇÕES DA PARTIDA AO VIVO (LIVE) ===
+  // === MODO JOGO (LIVE & CRONÓMETRO) ===
   const toggleMatchSquad = (playerId) => {
-    if (matchSquadIds.includes(playerId)) {
-      setMatchSquadIds(matchSquadIds.filter(id => id !== playerId));
-    } else {
+    if (matchSquadIds.includes(playerId)) setMatchSquadIds(matchSquadIds.filter(id => id !== playerId));
+    else {
       if (matchSquadIds.length >= 23) return alert("Limite de 23 atletas atingido.");
       setMatchSquadIds([...matchSquadIds, playerId]);
     }
@@ -198,33 +212,52 @@ export default function App() {
     if (matchSquadIds.length === 0) return alert("Selecione pelo menos 1 atleta.");
     if (!matchTitle.trim()) return alert("Dê um nome para a partida.");
     setIsMatchActive(true);
+    // Reset Timer Stats
+    setMatchTime(0);
+    setIsTimerRunning(true);
+    setCurrentPeriod(1);
+    setPeriodLogs([]);
+    setMatchEventLog([]);
+  };
+
+  const handleFinalizarTempo = () => {
+    if (currentPeriod > 4) return alert("Limite máximo de 4 tempos atingido.");
+    const log = `${currentPeriod}º Tempo: ${formatTime(matchTime)}`;
+    setPeriodLogs(prev => [...prev, log]);
+    setIsTimerRunning(false);
+    setMatchTime(0);
+    if (currentPeriod < 4) setCurrentPeriod(prev => prev + 1);
   };
 
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0;
     if (incrementValue < 0 && currentMatchVal === 0) return;
     
+    const player = players.find(p => p.id === playerId);
+    
+    // REGISTO NA LINHA DO TEMPO (Apenas adições e acoes específicas)
+    if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave'].includes(actionId)) {
+      const acaoNome = ACOES_TATICAS.find(a => a.id === actionId).nome;
+      const logEntry = `[T${currentPeriod} - ${formatTime(matchTime)}] ${player.nome} • ${acaoNome}`;
+      setMatchEventLog(prev => [logEntry, ...prev]);
+    }
+
     const newMatchVal = currentMatchVal + incrementValue;
     const prevPlayerStats = matchStats[playerId] || {};
     const newPlayerStats = { ...prevPlayerStats, [actionId]: newMatchVal };
 
     const wasActive = Object.entries(prevPlayerStats).some(([k, v]) => k !== 'partidas' && Number(v) > 0);
     const isNowActive = Object.entries(newPlayerStats).some(([k, v]) => k !== 'partidas' && Number(v) > 0);
-
     let partidasIncrement = 0;
     if (!wasActive && isNowActive) partidasIncrement = 1;
     else if (wasActive && !isNowActive) partidasIncrement = -1;
 
     if (partidasIncrement !== 0) newPlayerStats.partidas = (prevPlayerStats.partidas || 0) + partidasIncrement;
-
     setMatchStats(prev => ({ ...prev, [playerId]: newPlayerStats }));
 
-    const player = players.find(p => p.id === playerId);
     const novasAcoesGlobais = { ...player.acoes };
     novasAcoesGlobais[actionId] = Math.max(0, (parseInt(novasAcoesGlobais[actionId]) || 0) + incrementValue);
-    if (partidasIncrement !== 0) {
-      novasAcoesGlobais.partidas = Math.max(0, (parseInt(novasAcoesGlobais.partidas) || 0) + partidasIncrement);
-    }
+    if (partidasIncrement !== 0) novasAcoesGlobais.partidas = Math.max(0, (parseInt(novasAcoesGlobais.partidas) || 0) + partidasIncrement);
 
     setPlayers(players.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p));
     await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
@@ -238,7 +271,6 @@ export default function App() {
     
     const prevPlayerStats = matchStats[playerId] || {};
     const newPlayerStats = { ...prevPlayerStats, [actionId]: rawValue };
-
     const wasActive = Object.entries(prevPlayerStats).some(([k, v]) => k !== 'partidas' && Number(v) > 0);
     const isNowActive = Object.entries(newPlayerStats).some(([k, v]) => k !== 'partidas' && Number(v) > 0);
 
@@ -247,7 +279,6 @@ export default function App() {
     else if (wasActive && !isNowActive) partidasIncrement = -1;
 
     if (partidasIncrement !== 0) newPlayerStats.partidas = (prevPlayerStats.partidas || 0) + partidasIncrement;
-
     setMatchStats(prev => ({ ...prev, [playerId]: newPlayerStats }));
 
     if (diferenca !== 0 || partidasIncrement !== 0) {
@@ -255,18 +286,22 @@ export default function App() {
       const novasAcoesGlobais = { ...player.acoes };
       if (diferenca !== 0) novasAcoesGlobais[actionId] = Math.max(0, (parseInt(novasAcoesGlobais[actionId]) || 0) + diferenca);
       if (partidasIncrement !== 0) novasAcoesGlobais.partidas = Math.max(0, (parseInt(novasAcoesGlobais.partidas) || 0) + partidasIncrement);
-
       setPlayers(players.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p));
       await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
     }
   };
 
   const encerrarPartida = async () => {
-    if (!window.confirm("Salvar o relatório desta partida?")) return;
+    if (!window.confirm("Salvar o relatório e finalizar esta partida?")) return;
+    setIsTimerRunning(false);
+
     const dadosTratados = { ...matchStats };
     Object.keys(dadosTratados).forEach(pId => {
       if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0;
     });
+
+    // Guardamos o Log na mesma JSON sem afetar a estrutura da tabela
+    dadosTratados._meta = { eventLog: matchEventLog, periodLogs: periodLogs };
 
     const { data, error } = await supabase.from('partidas').insert([{ titulo: matchTitle, dados: dadosTratados }]).select();
     if (!error && data) {
@@ -279,72 +314,52 @@ export default function App() {
     }
   };
 
-  // === NOVAS FUNÇÕES: EDITAR / EXCLUIR PARTIDA NO HISTÓRICO ===
+  // === HISTÓRICO: EDIÇÃO/EXCLUSÃO ===
   const handleEditMatchClick = (partida) => {
     setEditingMatchId(partida.id);
-    setEditMatchData({
-      titulo: partida.titulo,
-      dados: JSON.parse(JSON.stringify(partida.dados)) // Cria uma cópia isolada para editar
-    });
-    setExpandedMatch(partida.id); // Força a aba a abrir
+    setEditMatchData({ titulo: partida.titulo, dados: JSON.parse(JSON.stringify(partida.dados)) });
+    setExpandedMatch(partida.id);
   };
-
-  const cancelMatchEdit = () => {
-    setEditingMatchId(null);
-    setEditMatchData(null);
-  };
+  const cancelMatchEdit = () => { setEditingMatchId(null); setEditMatchData(null); };
 
   const handleUpdateMatchEditAction = (playerId, actionId, incrementValue) => {
+    if(playerId === '_meta') return;
     setEditMatchData(prev => {
       const currentVal = parseInt(prev.dados[playerId]?.[actionId]) || 0;
-      const newVal = Math.max(0, currentVal + incrementValue);
-      return {
-        ...prev,
-        dados: { ...prev.dados, [playerId]: { ...(prev.dados[playerId] || {}), [actionId]: newVal } }
-      };
+      return { ...prev, dados: { ...prev.dados, [playerId]: { ...(prev.dados[playerId] || {}), [actionId]: Math.max(0, currentVal + incrementValue) } } };
     });
   };
-
   const handleSetMatchEditAction = (playerId, actionId, value) => {
+    if(playerId === '_meta') return;
     const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0);
-    setEditMatchData(prev => ({
-      ...prev,
-      dados: { ...prev.dados, [playerId]: { ...(prev.dados[playerId] || {}), [actionId]: rawValue } }
-    }));
+    setEditMatchData(prev => ({ ...prev, dados: { ...prev.dados, [playerId]: { ...(prev.dados[playerId] || {}), [actionId]: rawValue } } }));
   };
 
   const saveMatchEdit = async (partidaId) => {
     const originalMatch = matchHistory.find(m => m.id === partidaId);
     if (!originalMatch) return;
 
-    // Converte vazios em 0
     const dadosTratados = { ...editMatchData.dados };
     Object.keys(dadosTratados).forEach(pId => {
-      if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0;
+      if (pId !== '_meta' && dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0;
     });
 
-    // Calcula a diferença entre a edição nova e os dados originais da partida
     const diffs = {};
-    const allPlayerIds = new Set([...Object.keys(originalMatch.dados), ...Object.keys(dadosTratados)]);
+    const allPlayerIds = new Set([...Object.keys(originalMatch.dados).filter(id => id !== '_meta'), ...Object.keys(dadosTratados).filter(id => id !== '_meta')]);
     
     allPlayerIds.forEach(pId => {
       const oldStats = originalMatch.dados[pId] || {};
       const newStats = dadosTratados[pId] || {};
       diffs[pId] = {};
-      
       ACOES_TATICAS.forEach(acao => {
-        const oldVal = parseInt(oldStats[acao.id]) || 0;
-        const newVal = parseInt(newStats[acao.id]) || 0;
-        const dif = newVal - oldVal;
+        const dif = (parseInt(newStats[acao.id]) || 0) - (parseInt(oldStats[acao.id]) || 0);
         if (dif !== 0) diffs[pId][acao.id] = dif;
       });
     });
 
-    // Salva a partida editada no Supabase
     const { error: matchError } = await supabase.from('partidas').update({ titulo: editMatchData.titulo, dados: dadosTratados }).eq('id', partidaId);
-    if (matchError) return alert("Erro ao salvar a edição da partida.");
+    if (matchError) return alert("Erro ao salvar.");
 
-    // Atualiza os atributos globais de cada jogador de acordo com a diferença matemática
     let updatedPlayers = [...players];
     for (const pId of Object.keys(diffs)) {
       const playerDiffs = diffs[pId];
@@ -353,52 +368,46 @@ export default function App() {
         if (pIndex !== -1) {
           const player = updatedPlayers[pIndex];
           const novasAcoesGlobais = { ...player.acoes };
-          
           Object.keys(playerDiffs).forEach(actionId => {
             novasAcoesGlobais[actionId] = Math.max(0, (parseInt(novasAcoesGlobais[actionId]) || 0) + playerDiffs[actionId]);
           });
-
           updatedPlayers[pIndex] = { ...player, acoes: novasAcoesGlobais };
           await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', pId);
         }
       }
     }
-
     setPlayers(updatedPlayers);
     setMatchHistory(matchHistory.map(m => m.id === partidaId ? { ...m, titulo: editMatchData.titulo, dados: dadosTratados } : m));
     cancelMatchEdit();
   };
 
   const handleDeleteMatch = async (partidaId, partidaTitulo) => {
-    if (window.confirm(`ATENÇÃO! Excluir a partida "${partidaTitulo}"?\nOs dados que aconteceram neste jogo serão SUBTRAÍDOS do histórico global dos atletas para manter tudo certo.`)) {
+    if (window.confirm(`Excluir a partida "${partidaTitulo}" e subtrair dados globais?`)) {
       const originalMatch = matchHistory.find(m => m.id === partidaId);
       if (originalMatch) {
         let updatedPlayers = [...players];
-        for (const pId of Object.keys(originalMatch.dados)) {
+        for (const pId of Object.keys(originalMatch.dados).filter(id => id !== '_meta')) {
           const oldStats = originalMatch.dados[pId] || {};
           const pIndex = updatedPlayers.findIndex(p => p.id === pId);
           if (pIndex !== -1) {
             const player = updatedPlayers[pIndex];
             const novasAcoesGlobais = { ...player.acoes };
-            
             ACOES_TATICAS.forEach(acao => {
               const oldVal = parseInt(oldStats[acao.id]) || 0;
               if (oldVal > 0) novasAcoesGlobais[acao.id] = Math.max(0, (parseInt(novasAcoesGlobais[acao.id]) || 0) - oldVal);
             });
-
             updatedPlayers[pIndex] = { ...player, acoes: novasAcoesGlobais };
             await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', pId);
           }
         }
         setPlayers(updatedPlayers);
       }
-      
       await supabase.from('partidas').delete().eq('id', partidaId);
       setMatchHistory(matchHistory.filter(m => m.id !== partidaId));
     }
   };
 
-  // === FUNÇÕES DE ANÁLISE ===
+  // === ANÁLISE AVANÇADA ===
   const handleSaveCustomMetric = (e) => {
     e.preventDefault();
     if (!novaMetrica.nome || !novaMetrica.numerador || !novaMetrica.denominador) return;
@@ -409,15 +418,13 @@ export default function App() {
     setSelectedMetricId(id);
     setNovaMetrica({ nome: '', numerador: '', denominador: '' });
   };
-
   const handleDeleteCustomMetric = (id) => {
-    if(!window.confirm("Remover esta métrica do acesso rápido?")) return;
+    if(!window.confirm("Remover métrica?")) return;
     const metricList = savedMetrics.filter(m => m.id !== id);
     setSavedMetrics(metricList);
     localStorage.setItem('scoutpro_custom_metrics', JSON.stringify(metricList));
     if (selectedMetricId === id) setSelectedMetricId(metricList[0]?.id || null);
   };
-
   const calculateCustomMetric = (player, metricObj) => {
     if (!metricObj) return 0;
     const num = parseFloat(player.acoes[metricObj.numerador]) || 0;
@@ -425,22 +432,15 @@ export default function App() {
     if (den === 0) return 0;
     return (num / den).toFixed(3);
   };
-
   const getAnalyzedPlayers = () => {
     const selectedMetricObj = savedMetrics.find(m => m.id === selectedMetricId);
     if(!selectedMetricObj) return [];
     return [...players].sort((a, b) => calculateCustomMetric(b, selectedMetricObj) - calculateCustomMetric(a, selectedMetricObj));
   };
-
   const getRankedPlayers = () => [...players].sort((a, b) => b.acoes[rankMetric] - a.acoes[rankMetric]);
+  const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
-  const getIdade = (anoNasc) => {
-    if (!anoNasc) return '';
-    const idade = new Date().getFullYear() - anoNasc;
-    return `${idade} anos | `;
-  };
-
-  // === RENDERIZAÇÃO ===
+  // === RENDERIZAÇÃO DE AUTENTICAÇÃO ===
   if (!session) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col justify-center items-center p-4 font-sans text-white">
@@ -449,23 +449,11 @@ export default function App() {
           <p className="text-center text-gray-400 mb-8">{isLoginMode ? "Insira as suas credenciais para aceder ao sistema." : "Crie uma nova conta de analista."}</p>
           {authError && <div className="bg-red-900/50 border border-red-900 text-red-300 p-3 rounded mb-4 text-sm">{authError}</div>}
           <form onSubmit={handleAuth} className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">E-mail</label>
-              <input type="email" required placeholder="seu@email.com" value={authEmail} onChange={e => setAuthEmail(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Palavra-passe</label>
-              <input type="password" required placeholder="********" value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-            </div>
-            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 mt-4">
-              {authLoading ? "Aguarde..." : (isLoginMode ? "Entrar" : "Registar e Entrar")}
-            </button>
+            <div><label className="block text-sm text-gray-400 mb-1">E-mail</label><input type="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500" /></div>
+            <div><label className="block text-sm text-gray-400 mb-1">Palavra-passe</label><input type="password" required value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500" /></div>
+            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 mt-4">{authLoading ? "Aguarde..." : (isLoginMode ? "Entrar" : "Registar e Entrar")}</button>
           </form>
-          <div className="mt-6 text-center border-t border-gray-800 pt-6">
-            <button onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} className="text-sm text-gray-400 hover:text-white">
-              {isLoginMode ? "Ainda não tem conta? Criar nova conta." : "Já tem conta? Fazer Login."}
-            </button>
-          </div>
+          <div className="mt-6 text-center border-t border-gray-800 pt-6"><button onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} className="text-sm text-gray-400 hover:text-white">{isLoginMode ? "Criar nova conta." : "Já tem conta? Fazer Login."}</button></div>
         </div>
       </div>
     );
@@ -473,21 +461,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans pb-10">
-      <nav className="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-20 shadow-md">
+      <nav className="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
           <h1 className="text-2xl font-black text-blue-500 tracking-tighter">SCOUT<span className="text-white">PRO</span></h1>
           <div className="flex flex-wrap justify-center gap-2">
-            {[
-              { id: 'scout', label: 'Base de Dados' },
-              { id: 'live', label: '🔴 Modo Jogo' },
-              { id: 'historico', label: 'Histórico' },
-              { id: 'leaderboard', label: 'Ranking' },
-              { id: 'analise', label: 'Análise Avançada' },
-              { id: 'comparativo', label: 'Comparativo' }
-            ].map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-3 py-2 rounded font-bold transition text-sm ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
-                {tab.label}
-              </button>
+            {[{ id: 'scout', label: 'Base de Dados' }, { id: 'live', label: '🔴 Modo Jogo' }, { id: 'historico', label: 'Histórico' }, { id: 'leaderboard', label: 'Ranking' }, { id: 'analise', label: 'Análise Avançada' }, { id: 'comparativo', label: 'Comparativo' }].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-3 py-2 rounded font-bold transition text-sm ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{tab.label}</button>
             ))}
           </div>
           <div className="flex items-center gap-4 border-t lg:border-t-0 lg:border-l border-gray-800 pt-4 lg:pt-0 lg:pl-4">
@@ -503,9 +482,7 @@ export default function App() {
         {activeTab === 'scout' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <form onSubmit={handleSavePlayer} className="bg-gray-900 p-6 rounded-xl border border-gray-800 h-fit sticky top-24">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-blue-400">{editingPlayerId ? 'Editar Atleta' : 'Adicionar Atleta'}</h3>
-              </div>
+              <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-blue-400">{editingPlayerId ? 'Editar Atleta' : 'Adicionar Atleta'}</h3></div>
               <div className="space-y-3">
                 <input type="text" placeholder="Nome Completo" required value={novoJogador.nome} onChange={e => setNovoJogador({...novoJogador, nome: e.target.value})} className="w-full p-2 bg-gray-950 rounded border border-gray-700" />
                 <div className="grid grid-cols-2 gap-2">
@@ -514,16 +491,13 @@ export default function App() {
                     {teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <select required value={novoJogador.categoria} onChange={e => setNovoJogador({...novoJogador, categoria: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700">
-                    <option value="Base">Base (Sub-20)</option>
-                    <option value="Principal">Principal</option>
+                    <option value="Base">Base (Sub-20)</option><option value="Principal">Principal</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <input type="text" placeholder="Posição (Ex: MEI)" required value={novoJogador.posicao} onChange={e => setNovoJogador({...novoJogador, posicao: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700" />
                   <select required value={novoJogador.pe_dominante} onChange={e => setNovoJogador({...novoJogador, pe_dominante: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700">
-                    <option value="Destro">Destro</option>
-                    <option value="Canhoto">Canhoto</option>
-                    <option value="Ambidestro">Ambidestro</option>
+                    <option value="Destro">Destro</option><option value="Canhoto">Canhoto</option><option value="Ambidestro">Ambidestro</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -584,13 +558,13 @@ export default function App() {
           </div>
         )}
 
-        {/* ABA: MODO JOGO (LIVE) */}
+        {/* ABA: MODO JOGO (LIVE COM CRONÓMETRO E EVENT LOG) */}
         {activeTab === 'live' && (
           <div className="space-y-6">
             {!isMatchActive ? (
               <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-3xl mx-auto">
                 <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-                <p className="text-gray-400 mb-6">Convoque os jogadores. A estatística de "Partidas" será computada automaticamente.</p>
+                <p className="text-gray-400 mb-6">Convoque os jogadores. Ações cruciais serão guardadas automaticamente numa linha do tempo pelo Cronómetro.</p>
                 <input type="text" placeholder="Ex: Final do Campeonato vs Flamengo" required value={matchTitle} onChange={e => setMatchTitle(e.target.value)} className="w-full p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg mb-4" />
                 <div className="flex flex-col gap-4 mb-6">
                   <select onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none">
@@ -614,17 +588,63 @@ export default function App() {
                 <button onClick={iniciarPartida} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl text-lg transition shadow-lg shadow-green-900/20">Iniciar Partida</button>
               </div>
             ) : (
-              <div>
-                <div className="flex flex-col md:flex-row justify-between items-center bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl mb-6 sticky top-20 z-10">
-                  <div>
-                    <h2 className="text-xl font-bold text-red-500 flex items-center gap-2"><span className="animate-pulse">🔴</span> LIVE: {matchTitle}</h2>
-                    <p className="text-xs text-gray-400">Estatísticas exclusivas desta partida. "Partidas" é computado de forma oculta.</p>
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                
+                {/* ÁREA ESQUERDA: CRONÓMETRO E EVENT LOG */}
+                <div className="xl:col-span-1 space-y-4">
+                  {/* Painel do Cronómetro */}
+                  <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl sticky top-20 z-10 flex flex-col items-center">
+                    <h2 className="text-sm font-bold text-red-500 flex items-center gap-2 mb-2 uppercase tracking-widest"><span className="animate-pulse">🔴</span> {matchTitle}</h2>
+                    
+                    <div className="text-gray-400 font-bold mb-1">{currentPeriod}º Tempo</div>
+                    <div className="text-6xl font-mono font-black text-white mb-6 tabular-nums">{formatTime(matchTime)}</div>
+                    
+                    <div className="flex gap-2 w-full mb-4">
+                      {!isTimerRunning ? (
+                        <button onClick={() => setIsTimerRunning(true)} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded-lg font-bold text-lg transition shadow-lg">▶ Iniciar</button>
+                      ) : (
+                        <button onClick={() => setIsTimerRunning(false)} className="flex-1 bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold text-lg transition shadow-lg">⏸ Pausar</button>
+                      )}
+                    </div>
+                    
+                    <button onClick={handleFinalizarTempo} disabled={currentPeriod > 4} className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 py-2 rounded-lg font-bold mb-4 transition disabled:opacity-50">
+                      ⏹ Finalizar {currentPeriod}º Tempo
+                    </button>
+
+                    {/* Exibição dos tempos gravados */}
+                    {periodLogs.length > 0 && (
+                      <div className="w-full bg-gray-950 rounded-lg p-3 border border-gray-800 mb-6 text-sm">
+                        <div className="text-gray-500 mb-1 font-bold">Duração (Acréscimos):</div>
+                        {periodLogs.map((log, i) => <div key={i} className="text-blue-400 font-mono">{log}</div>)}
+                      </div>
+                    )}
+
+                    <button onClick={encerrarPartida} className="w-full px-6 py-3 bg-red-700 hover:bg-red-600 rounded-lg font-bold transition shadow-lg shadow-red-900/20">
+                      Terminar Partida e Gravar
+                    </button>
                   </div>
-                  <button onClick={encerrarPartida} className="mt-4 md:mt-0 px-6 py-2 bg-red-600 hover:bg-red-500 rounded-lg font-bold transition">Encerrar e Salvar</button>
+
+                  {/* Painel de Event Log */}
+                  <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl h-96 flex flex-col">
+                    <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2">⏱️ Linha do Tempo</h3>
+                    <div className="flex-1 bg-gray-950 rounded-lg border border-gray-800 p-3 overflow-y-auto space-y-2">
+                      {matchEventLog.length === 0 ? (
+                        <div className="text-gray-600 text-xs text-center mt-10">Os Golos, Cartões e Passes Chave aparecerão aqui automaticamente.</div>
+                      ) : (
+                        matchEventLog.map((log, i) => (
+                          <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">
+                            {log}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+
+                {/* ÁREA DIREITA: JOGADORES (SCOUT) */}
+                <div className="xl:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
                   {players.filter(p => matchSquadIds.includes(p.id)).map(player => (
-                    <div key={player.id} className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-lg relative overflow-hidden">
+                    <div key={player.id} className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-lg relative overflow-hidden h-fit">
                       <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
                       <div className="mb-3 pb-3 border-b border-gray-800/50 pl-2">
                         <h4 className="text-base font-bold leading-tight">{player.nome}</h4>
@@ -632,7 +652,7 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-1 gap-1.5 pl-2">
                         {ACOES_TATICAS.filter(a => a.id !== 'partidas').map(acao => (
-                          <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
+                          <div key={acao.id} className={`flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave'].includes(acao.id) ? 'border-l-2 border-l-blue-500/30' : ''}`}>
                             <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
                             {acao.id === 'minutos' ? (
                               <input type="number" min="0" placeholder="0" value={matchStats[player.id]?.[acao.id] === '' ? '' : (matchStats[player.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500" />
@@ -659,19 +679,17 @@ export default function App() {
           <div className="space-y-6">
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
               <h2 className="text-2xl font-bold mb-2">Criar Cruzamento de Dados</h2>
-              <p className="text-sm text-gray-400 mb-6">Crie e guarde fórmulas para avaliar a eficiência e o rendimento específico dos atletas.</p>
+              <p className="text-sm text-gray-400 mb-6">Crie e guarde fórmulas para avaliar a eficiência dos atletas.</p>
               
               <form onSubmit={handleSaveCustomMetric} className="flex flex-col md:flex-row gap-4 items-center">
-                <input type="text" placeholder="Nome da Métrica (Ex: Golos por Minuto)" required value={novaMetrica.nome} onChange={e => setNovaMetrica({...novaMetrica, nome: e.target.value})} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm w-full" />
+                <input type="text" placeholder="Nome da Métrica (Ex: Golos/Minuto)" required value={novaMetrica.nome} onChange={e => setNovaMetrica({...novaMetrica, nome: e.target.value})} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm w-full" />
                 <div className="flex items-center gap-2 w-full md:w-auto">
                   <select required value={novaMetrica.numerador} onChange={e => setNovaMetrica({...novaMetrica, numerador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none">
-                    <option value="">Numerador (X)...</option>
-                    {ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                    <option value="">Numerador (X)...</option>{ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
                   </select>
                   <span className="font-black text-xl text-gray-600">÷</span>
                   <select required value={novaMetrica.denominador} onChange={e => setNovaMetrica({...novaMetrica, denominador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none">
-                    <option value="">Denominador (Y)...</option>
-                    {ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                    <option value="">Denominador (Y)...</option>{ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
                   </select>
                 </div>
                 <button type="submit" className="w-full md:w-auto px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg transition shadow-lg">Salvar Métrica</button>
@@ -679,7 +697,7 @@ export default function App() {
             </div>
 
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800">
-              <h3 className="text-lg font-bold mb-4 text-blue-400 flex items-center gap-2">⚡ Acesso Rápido (Métricas Salvas)</h3>
+              <h3 className="text-lg font-bold mb-4 text-blue-400 flex items-center gap-2">⚡ Acesso Rápido</h3>
               {savedMetrics.length === 0 ? (
                 <div className="text-gray-500 text-sm border border-dashed border-gray-700 p-4 rounded-lg text-center">Nenhuma métrica guardada.</div>
               ) : (
@@ -689,7 +707,7 @@ export default function App() {
                       <div className={`px-4 py-2 text-sm font-bold ${selectedMetricId === metric.id ? 'bg-blue-900/40 text-blue-300' : 'bg-gray-800 text-gray-300'}`} onClick={() => setSelectedMetricId(metric.id)}>
                         {metric.nome} <span className="font-mono text-xs opacity-50 ml-2">({metric.numerador}/{metric.denominador})</span>
                       </div>
-                      <button onClick={() => handleDeleteCustomMetric(metric.id)} className="bg-gray-950 px-3 py-2 text-red-500 hover:text-red-400 hover:bg-red-900/20 text-sm" title="Remover Métrica">✕</button>
+                      <button onClick={() => handleDeleteCustomMetric(metric.id)} className="bg-gray-950 px-3 py-2 text-red-500 hover:text-red-400 hover:bg-red-900/20 text-sm">✕</button>
                     </div>
                   ))}
                 </div>
@@ -703,22 +721,17 @@ export default function App() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-800 text-gray-400 text-sm">
-                        <th className="p-3">#</th>
-                        <th className="p-3">Atleta</th>
-                        <th className="p-3 text-right">Fórmula</th>
-                        <th className="p-3 text-right font-black text-blue-400">Resultado (Índice)</th>
+                        <th className="p-3">#</th><th className="p-3">Atleta</th><th className="p-3 text-right">Fórmula</th><th className="p-3 text-right font-black text-blue-400">Resultado (Índice)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {getAnalyzedPlayers().map((player, idx) => {
                         const metricObj = savedMetrics.find(m => m.id === selectedMetricId);
-                        const valNum = player.acoes[metricObj.numerador] || 0;
-                        const valDen = player.acoes[metricObj.denominador] || 0;
                         return (
                           <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
                             <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
                             <td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.posicao}</span></td>
-                            <td className="p-3 text-right text-xs font-mono text-gray-500">{valNum} / {valDen}</td>
+                            <td className="p-3 text-right text-xs font-mono text-gray-500">{(player.acoes[metricObj.numerador] || 0)} / {(player.acoes[metricObj.denominador] || 0)}</td>
                             <td className="p-3 text-right font-mono text-xl text-green-400 font-bold">{calculateCustomMetric(player, metricObj)}</td>
                           </tr>
                         );
@@ -731,7 +744,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ABA: HISTÓRICO DE PARTIDAS (AGORA COM EDIÇÃO E EXCLUSÃO) */}
+        {/* ABA: HISTÓRICO DE PARTIDAS */}
         {activeTab === 'historico' && (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold mb-6">Relatórios de Partidas Salvas</h2>
@@ -741,97 +754,85 @@ export default function App() {
               matchHistory.map(partida => (
                 <div key={partida.id} className={`bg-gray-900 rounded-xl border transition ${editingMatchId === partida.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
                   <div className="p-4 bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800/50 gap-4">
-                    
-                    {/* CABEÇALHO DA PARTIDA (Visualizar vs Editar) */}
                     {editingMatchId === partida.id ? (
-                      <div className="flex-1 w-full">
-                        <input 
-                          type="text" 
-                          value={editMatchData.titulo} 
-                          onChange={e => setEditMatchData({...editMatchData, titulo: e.target.value})}
-                          className="w-full p-2 bg-gray-950 rounded border border-gray-700 text-blue-400 font-bold outline-none focus:border-blue-500"
-                        />
-                      </div>
+                      <div className="flex-1 w-full"><input type="text" value={editMatchData.titulo} onChange={e => setEditMatchData({...editMatchData, titulo: e.target.value})} className="w-full p-2 bg-gray-950 rounded border border-gray-700 text-blue-400 font-bold outline-none focus:border-blue-500" /></div>
                     ) : (
                       <div>
                         <h3 className="font-bold text-lg text-blue-400">{partida.titulo}</h3>
                         <p className="text-sm text-gray-400">Criado em: {new Date(partida.criado_em).toLocaleDateString()} às {new Date(partida.criado_em).toLocaleTimeString()}</p>
                       </div>
                     )}
-
-                    {/* BOTÕES DE AÇÃO */}
                     <div className="flex items-center gap-3">
                       {editingMatchId === partida.id ? (
-                        <>
-                          <button onClick={() => saveMatchEdit(partida.id)} className="text-green-500 hover:text-green-400 font-bold px-2 py-1 bg-green-900/20 rounded">Salvar Correção</button>
-                          <button onClick={cancelMatchEdit} className="text-gray-400 hover:text-gray-300 px-2 py-1">Cancelar</button>
-                        </>
+                        <><button onClick={() => saveMatchEdit(partida.id)} className="text-green-500 hover:text-green-400 font-bold px-2 py-1 bg-green-900/20 rounded">Salvar Correção</button><button onClick={cancelMatchEdit} className="text-gray-400 hover:text-gray-300 px-2 py-1">Cancelar</button></>
                       ) : (
-                        <>
-                          <button onClick={() => handleEditMatchClick(partida)} className="text-blue-500 hover:text-blue-400 p-1 bg-blue-900/20 rounded" title="Editar Partida">✏️</button>
-                          <button onClick={() => handleDeleteMatch(partida.id, partida.titulo)} className="text-red-500 hover:text-red-400 p-1 bg-red-900/20 rounded" title="Excluir Partida">🗑️</button>
-                          <span className="text-gray-500 cursor-pointer text-sm font-bold ml-2" onClick={() => setExpandedMatch(expandedMatch === partida.id ? null : partida.id)}>
-                            {expandedMatch === partida.id ? 'Ocultar ▲' : 'Ver ▼'}
-                          </span>
-                        </>
+                        <><button onClick={() => handleEditMatchClick(partida)} className="text-blue-500 hover:text-blue-400 p-1 bg-blue-900/20 rounded">✏️</button><button onClick={() => handleDeleteMatch(partida.id, partida.titulo)} className="text-red-500 hover:text-red-400 p-1 bg-red-900/20 rounded">🗑️</button><span className="text-gray-500 cursor-pointer text-sm font-bold ml-2" onClick={() => setExpandedMatch(expandedMatch === partida.id ? null : partida.id)}>{expandedMatch === partida.id ? 'Ocultar ▲' : 'Ver ▼'}</span></>
                       )}
                     </div>
                   </div>
                   
-                  {/* TABELA DE DADOS (Visualizar vs Editar) */}
                   {expandedMatch === partida.id && (
-                    <div className="p-4 overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-max">
-                        <thead>
-                          <tr className="border-b border-gray-800 text-gray-400 text-sm">
-                            <th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">Atleta</th>
-                            {ACOES_TATICAS.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,3)}.</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.keys(editingMatchId === partida.id ? editMatchData.dados : partida.dados).map(playerId => {
-                            const p = players.find(x => x.id === playerId) || { nome: 'Atleta Removido' };
-                            
-                            // Se estivermos em MODO DE EDIÇÃO
-                            if (editingMatchId === partida.id) {
+                    <div className="p-4">
+                      
+                      {/* EXIBE OS LOGS DA PARTIDA SE EXISTIREM */}
+                      {partida.dados._meta && (
+                         <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {partida.dados._meta.periodLogs?.length > 0 && (
+                               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
+                                 <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
+                                 {partida.dados._meta.periodLogs.map((l, i) => <div key={i} className="text-blue-400 font-mono text-sm">{l}</div>)}
+                               </div>
+                            )}
+                            {partida.dados._meta.eventLog?.length > 0 && (
+                               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-40 overflow-y-auto">
+                                 <h4 className="text-gray-400 font-bold text-sm mb-2">Linha do Tempo:</h4>
+                                 {partida.dados._meta.eventLog.map((l, i) => <div key={i} className="text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1 mb-1 bg-gray-900/50">{l}</div>)}
+                               </div>
+                            )}
+                         </div>
+                      )}
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-max">
+                          <thead>
+                            <tr className="border-b border-gray-800 text-gray-400 text-sm">
+                              <th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">Atleta</th>
+                              {ACOES_TATICAS.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,3)}.</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.keys(editingMatchId === partida.id ? editMatchData.dados : partida.dados).filter(id => id !== '_meta').map(playerId => {
+                              const p = players.find(x => x.id === playerId) || { nome: 'Atleta Removido' };
+                              if (editingMatchId === partida.id) {
+                                return (
+                                  <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
+                                    <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
+                                    {ACOES_TATICAS.map(a => (
+                                      <td key={a.id} className="p-1 text-center">
+                                        {['minutos', 'partidas'].includes(a.id) ? (
+                                          <input type="number" min="0" placeholder="0" value={editMatchData.dados[playerId]?.[a.id] === '' ? '' : (editMatchData.dados[playerId]?.[a.id] || 0)} onChange={(e) => handleSetMatchEditAction(playerId, a.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetMatchEditAction(playerId, a.id, '0'); }} className="w-12 p-1 text-center bg-gray-950 text-blue-400 font-bold text-xs rounded border border-gray-700 outline-none" />
+                                        ) : (
+                                          <div className="flex space-x-1 items-center justify-center">
+                                            <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, -1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded flex items-center justify-center font-bold text-xs hover:bg-red-900/50">-</button>
+                                            <span className="font-mono w-4 text-center text-blue-400 font-bold text-xs">{editMatchData.dados[playerId]?.[a.id] || 0}</span>
+                                            <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, 1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded flex items-center justify-center font-bold text-xs hover:bg-green-900/50">+</button>
+                                          </div>
+                                        )}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              }
                               return (
                                 <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
                                   <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
-                                  {ACOES_TATICAS.map(a => (
-                                    <td key={a.id} className="p-1 text-center">
-                                      {['minutos', 'partidas'].includes(a.id) ? (
-                                        <input 
-                                          type="number" min="0" placeholder="0"
-                                          value={editMatchData.dados[playerId]?.[a.id] === '' ? '' : (editMatchData.dados[playerId]?.[a.id] || 0)}
-                                          onChange={(e) => handleSetMatchEditAction(playerId, a.id, e.target.value)}
-                                          onBlur={(e) => { if (e.target.value === '') handleSetMatchEditAction(playerId, a.id, '0'); }}
-                                          className="w-12 p-1 text-center bg-gray-950 text-blue-400 font-bold text-xs rounded border border-gray-700 outline-none"
-                                        />
-                                      ) : (
-                                        <div className="flex space-x-1 items-center justify-center">
-                                          <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, -1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded flex items-center justify-center font-bold text-xs hover:bg-red-900/50">-</button>
-                                          <span className="font-mono w-4 text-center text-blue-400 font-bold text-xs">{editMatchData.dados[playerId]?.[a.id] || 0}</span>
-                                          <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, 1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded flex items-center justify-center font-bold text-xs hover:bg-green-900/50">+</button>
-                                        </div>
-                                      )}
-                                    </td>
-                                  ))}
+                                  {ACOES_TATICAS.map(a => <td key={a.id} className="p-2 text-center font-mono text-gray-300">{partida.dados[playerId]?.[a.id] || 0}</td>)}
                                 </tr>
                               );
-                            }
-
-                            // MODO DE VISUALIZAÇÃO PADRÃO
-                            return (
-                              <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
-                                <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
-                                {ACOES_TATICAS.map(a => (
-                                  <td key={a.id} className="p-2 text-center font-mono text-gray-300">{partida.dados[playerId]?.[a.id] || 0}</td>
-                                ))}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -851,20 +852,10 @@ export default function App() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-800 text-gray-400">
-                    <th className="p-3">#</th>
-                    <th className="p-3">Atleta</th>
-                    <th className="p-3 text-right">Métrica</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b border-gray-800 text-gray-400"><th className="p-3">#</th><th className="p-3">Atleta</th><th className="p-3 text-right">Métrica</th></tr></thead>
                 <tbody>
                   {getRankedPlayers().map((player, idx) => (
-                    <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
-                      <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
-                      <td className="p-3 font-bold">{player.nome}</td>
-                      <td className="p-3 text-right font-mono text-xl text-green-400">{player.acoes[rankMetric]}</td>
-                    </tr>
+                    <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20"><td className="p-3 font-mono text-gray-500">{idx + 1}</td><td className="p-3 font-bold">{player.nome}</td><td className="p-3 text-right font-mono text-xl text-green-400">{player.acoes[rankMetric]}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -878,12 +869,10 @@ export default function App() {
             <h2 className="text-2xl font-bold mb-6">Frente a Frente Global</h2>
             <div className="grid grid-cols-2 gap-4 mb-8">
               <select value={compareA} onChange={e => setCompareA(e.target.value)} className="p-3 bg-gray-950 rounded border border-gray-700 text-lg outline-none">
-                <option value="">Selecione o Atleta A...</option>
-                {players.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                <option value="">Selecione o Atleta A...</option>{players.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </select>
               <select value={compareB} onChange={e => setCompareB(e.target.value)} className="p-3 bg-gray-950 rounded border border-gray-700 text-lg outline-none">
-                <option value="">Selecione o Atleta B...</option>
-                {players.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                <option value="">Selecione o Atleta B...</option>{players.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </select>
             </div>
             {compareA && compareB && (
@@ -894,18 +883,12 @@ export default function App() {
                   const valA = pA.acoes[acao.id];
                   const valB = pB.acoes[acao.id];
                   const max = Math.max(valA, valB, 1);
-                  const pctA = (valA / max) * 100;
-                  const pctB = (valB / max) * 100;
                   return (
                     <div key={acao.id} className="relative">
-                      <div className="flex justify-between text-sm text-gray-400 mb-1 px-1">
-                        <span className="font-mono text-blue-400 font-bold">{valA}</span>
-                        <span className="uppercase tracking-widest text-xs">{acao.nome}</span>
-                        <span className="font-mono text-orange-400 font-bold">{valB}</span>
-                      </div>
+                      <div className="flex justify-between text-sm text-gray-400 mb-1 px-1"><span className="font-mono text-blue-400 font-bold">{valA}</span><span className="uppercase tracking-widest text-xs">{acao.nome}</span><span className="font-mono text-orange-400 font-bold">{valB}</span></div>
                       <div className="flex h-3 bg-gray-950 rounded overflow-hidden">
-                        <div className="w-1/2 flex justify-end bg-gray-950 pr-1"><div className="h-full bg-blue-500 rounded-l" style={{ width: `${pctA}%` }}></div></div>
-                        <div className="w-1/2 flex justify-start bg-gray-950 pl-1"><div className="h-full bg-orange-500 rounded-r" style={{ width: `${pctB}%` }}></div></div>
+                        <div className="w-1/2 flex justify-end bg-gray-950 pr-1"><div className="h-full bg-blue-500 rounded-l" style={{ width: `${(valA / max) * 100}%` }}></div></div>
+                        <div className="w-1/2 flex justify-start bg-gray-950 pl-1"><div className="h-full bg-orange-500 rounded-r" style={{ width: `${(valB / max) * 100}%` }}></div></div>
                       </div>
                     </div>
                   );
