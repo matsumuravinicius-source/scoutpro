@@ -635,7 +635,6 @@ export default function App() {
                   <div className="col-span-2 text-center text-gray-500 py-10 bg-gray-900 rounded-xl">Nenhum jogador encontrado com os filtros selecionados.</div>
                 ) : (
                   displayedPlayers.map(player => (
-                    // ADICIONADA A CLASSE "h-fit" AQUI PARA NÃO ESTICAR O CARTÃO DA BIANCA
                     <div key={player.id} className={`bg-gray-900 p-4 rounded-xl border transition h-fit ${editingPlayerId === player.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
                       <div 
                         className="flex justify-between items-start cursor-pointer hover:bg-gray-800/50 p-2 -m-2 rounded transition"
@@ -879,23 +878,35 @@ export default function App() {
                   {expandedMatch === partida.id && (
                     <div className="p-4">
                       {partida.dados._meta && (
-                         <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {partida.dados._meta.periodLogs?.length > 0 && (
-                               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
-                                 <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
-                                 {partida.dados._meta.periodLogs.map((l, i) => <div key={i} className="text-blue-400 font-mono text-sm">{l}</div>)}
+                         <div className="mb-6 space-y-4">
+                            {/* LINHA SUPERIOR: Tempos e Golos Sofridos */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {partida.dados._meta.periodLogs?.length > 0 && (
+                                 <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
+                                   <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
+                                   {partida.dados._meta.periodLogs.map((l, i) => <div key={i} className="text-blue-400 font-mono text-sm">{l}</div>)}
+                                 </div>
+                              )}
+                              <div className="bg-gray-950 p-3 rounded-lg border border-red-900/30">
+                                <h4 className="text-red-400 font-bold text-sm mb-2">🛡️ Golos Sofridos (Adversário):</h4>
+                                {editingMatchId === partida.id ? (
+                                  <input type="number" min="0" value={editMatchData.dados._meta?.gols_sofridos ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, gols_sofridos: parseInt(e.target.value)||0}}})} className="w-16 p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" />
+                                ) : (
+                                  <div className="text-red-400 font-mono text-xl font-bold">{partida.dados._meta?.gols_sofridos ?? 0}</div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* LINHA INFERIOR: Linha do Tempo (Event Log) */}
+                            {partida.dados._meta.eventLog?.length > 0 && (
+                               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-48 overflow-y-auto">
+                                 <h4 className="text-gray-400 font-bold text-sm mb-2">⏱️ Linha do Tempo:</h4>
+                                 {partida.dados._meta.eventLog.map((l, i) => <div key={i} className="text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1 mb-1 bg-gray-900/50">{l}</div>)}
                                </div>
                             )}
-                            <div className="bg-gray-950 p-3 rounded-lg border border-red-900/30">
-                              <h4 className="text-red-400 font-bold text-sm mb-2">🛡️ Golos Sofridos (Adversário):</h4>
-                              {editingMatchId === partida.id ? (
-                                <input type="number" min="0" value={editMatchData.dados._meta?.gols_sofridos ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, gols_sofridos: parseInt(e.target.value)||0}}})} className="w-16 p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" />
-                              ) : (
-                                <div className="text-red-400 font-mono text-xl font-bold">{partida.dados._meta?.gols_sofridos ?? 0}</div>
-                              )}
-                            </div>
                          </div>
                       )}
+
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse min-w-max">
                           <thead><tr className="border-b border-gray-800 text-gray-400 text-sm"><th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">Atleta</th>{ACOES_TATICAS.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,3)}.</th>)}</tr></thead>
