@@ -39,6 +39,7 @@ export default function App() {
   // === ESTADOS DE GESTÃO ===
   const [newTeamName, setNewTeamName] = useState('');
   const [editingPlayerId, setEditingPlayerId] = useState(null);
+  const [expandedPlayers, setExpandedPlayers] = useState([]); // NOVO: Controle de sanfona (lista oculta)
   const [novoJogador, setNovoJogador] = useState({ 
     nome: '', time_nome: '', categoria: '', posicao: '', 
     altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' 
@@ -177,7 +178,6 @@ export default function App() {
   };
 
   const handleEditClick = (player) => {
-    // Alterna a edição: se clicar no mesmo jogador que já está a editar, cancela a edição.
     if (editingPlayerId === player.id) {
       cancelarEdicao();
       return;
@@ -203,6 +203,10 @@ export default function App() {
         setMatchSquadIds(matchSquadIds.filter(id => id !== playerId));
       }
     }
+  };
+
+  const toggleExpandPlayer = (id) => {
+    setExpandedPlayers(prev => prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]);
   };
 
   const handleSetGlobalAction = async (playerId, actionId, value) => {
@@ -324,12 +328,7 @@ export default function App() {
 
     const squadTeams = [...new Set(matchSquadIds.map(id => players.find(p => p.id === id)?.time_nome).filter(Boolean))];
     
-    dadosTratados._meta = { 
-      eventLog: matchEventLog, 
-      periodLogs: periodLogs, 
-      gols_sofridos: opponentGoals,
-      equipes: squadTeams 
-    };
+    dadosTratados._meta = { eventLog: matchEventLog, periodLogs: periodLogs, gols_sofridos: opponentGoals, equipes: squadTeams };
 
     const { data, error } = await supabase.from('partidas').insert([{ titulo: matchTitle, dados: dadosTratados }]).select();
     if (!error && data) {
@@ -637,44 +636,55 @@ export default function App() {
                 ) : (
                   displayedPlayers.map(player => (
                     <div key={player.id} className={`bg-gray-900 p-4 rounded-xl border transition ${editingPlayerId === player.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
-                      <div className="flex justify-between items-start mb-3 pb-3 border-b border-gray-800/50">
+                      {/* O cabeçalho do cartão do jogador (clicável para expandir) */}
+                      <div 
+                        className="flex justify-between items-start cursor-pointer hover:bg-gray-800/50 p-2 -m-2 rounded transition"
+                        onClick={() => toggleExpandPlayer(player.id)}
+                      >
                         <div>
                           <h4 className="text-lg font-bold flex items-center gap-2">
                             {player.nome}
-                            <button onClick={() => handleEditClick(player)} className="text-blue-500 hover:text-blue-400 p-1" title={editingPlayerId === player.id ? "Concluir Edição" : "Editar Estatísticas e Info"}>✏️</button>
-                            <button onClick={() => handleDeletePlayer(player.id, player.nome)} className="text-red-500 hover:text-red-400 p-1">🗑️</button>
+                            {/* stopPropagation evita que abrir o modo de edição feche a sanfona acidentalmente */}
+                            <button onClick={(e) => { e.stopPropagation(); handleEditClick(player); }} className="text-blue-500 hover:text-blue-400 p-1" title={editingPlayerId === player.id ? "Concluir Edição" : "Editar Estatísticas e Info"}>✏️</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id, player.nome); }} className="text-red-500 hover:text-red-400 p-1">🗑️</button>
                           </h4>
                           <p className="text-xs text-blue-400">{player.time_nome} • {player.categoria} • {player.posicao}</p>
                         </div>
-                        <div className="text-right text-xs text-gray-400">
+                        <div className="text-right text-xs text-gray-400 flex flex-col items-end">
                           <p>{getIdade(player.ano_nascimento)}{player.altura}m | {player.pe_dominante}</p>
                           <p>Fat: {player.percentual_gordura}% | Max: {player.velocidade_maxima}km/h</p>
+                          {/* Indicador visual de ocultar/mostrar */}
+                          <span className="text-blue-500 font-bold mt-2 text-xs">
+                            {expandedPlayers.includes(player.id) || editingPlayerId === player.id ? 'Ocultar ▲' : 'Ver Ações ▼'}
+                          </span>
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 gap-1">
-                        {ACOES_TATICAS.map(acao => (
-                          <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
-                            <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
-                            
-                            {/* AQUI ESTÁ A LÓGICA DE OCULTAR/MOSTRAR OS BOTÕES DE EDIÇÃO */}
-                            {editingPlayerId === player.id ? (
-                              ['minutos', 'partidas'].includes(acao.id) ? (
-                                <input type="number" min="0" placeholder="0" value={player.acoes[acao.id] === '' ? '' : (player.acoes[acao.id] || 0)} onChange={(e) => handleSetGlobalAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetGlobalAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:border-blue-500" />
+                      {/* LÓGICA DE OCULTAR: Mostra apenas se clicado OU se estiver em modo de edição (Lápis) */}
+                      {(expandedPlayers.includes(player.id) || editingPlayerId === player.id) && (
+                        <div className="grid grid-cols-1 gap-1 mt-3 pt-3 border-t border-gray-800/50">
+                          {ACOES_TATICAS.map(acao => (
+                            <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
+                              <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
+                              
+                              {editingPlayerId === player.id ? (
+                                ['minutos', 'partidas'].includes(acao.id) ? (
+                                  <input type="number" min="0" placeholder="0" value={player.acoes[acao.id] === '' ? '' : (player.acoes[acao.id] || 0)} onChange={(e) => handleSetGlobalAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetGlobalAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:border-blue-500" />
+                                ) : (
+                                  <div className="flex space-x-1 items-center">
+                                    <button type="button" onClick={() => handleUpdateGlobalActions(player.id, acao.id, -1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold">-</button>
+                                    <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{player.acoes[acao.id] || 0}</span>
+                                    <button type="button" onClick={() => handleUpdateGlobalActions(player.id, acao.id, 1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-green-900/50 flex items-center justify-center font-bold">+</button>
+                                  </div>
+                                )
                               ) : (
-                                <div className="flex space-x-1 items-center">
-                                  <button type="button" onClick={() => handleUpdateGlobalActions(player.id, acao.id, -1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold">-</button>
-                                  <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{player.acoes[acao.id] || 0}</span>
-                                  <button type="button" onClick={() => handleUpdateGlobalActions(player.id, acao.id, 1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-green-900/50 flex items-center justify-center font-bold">+</button>
-                                </div>
-                              )
-                            ) : (
-                              <span className="font-mono text-blue-400 font-bold text-sm pr-1">{player.acoes[acao.id] || 0}</span>
-                            )}
+                                <span className="font-mono text-blue-400 font-bold text-sm pr-1">{player.acoes[acao.id] || 0}</span>
+                              )}
 
-                          </div>
-                        ))}
-                      </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
