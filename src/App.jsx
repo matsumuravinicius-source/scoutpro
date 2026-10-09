@@ -45,7 +45,7 @@ export default function App() {
   });
 
   // === ESTADOS DO MODO JOGO (LIVE) ===
-  const [matchTeam, setMatchTeam] = useState(''); // NOVO: Guarda o clube selecionado para a partida
+  const [matchTeam, setMatchTeam] = useState('');
   const [matchSquadIds, setMatchSquadIds] = useState([]);
   const [isMatchActive, setIsMatchActive] = useState(false);
   const [matchTitle, setMatchTitle] = useState('');
@@ -177,6 +177,11 @@ export default function App() {
   };
 
   const handleEditClick = (player) => {
+    // Alterna a edição: se clicar no mesmo jogador que já está a editar, cancela a edição.
+    if (editingPlayerId === player.id) {
+      cancelarEdicao();
+      return;
+    }
     setEditingPlayerId(player.id);
     setNovoJogador({
       nome: player.nome, time_nome: player.time_nome, categoria: player.categoria, posicao: player.posicao,
@@ -458,7 +463,6 @@ export default function App() {
   const getRankedPlayers = () => [...displayedPlayers].sort((a, b) => b.acoes[rankMetric] - a.acoes[rankMetric]);
   const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
-  // Componente de Filtro Reutilizável
   const GlobalFilters = () => (
     <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-900 p-4 rounded-xl border border-gray-800">
       <div className="flex items-center gap-2 text-gray-400 font-bold mr-2">🔎 Filtros:</div>
@@ -523,13 +527,12 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
-        {/* ABA: CLUBES (ESTATÍSTICAS) */}
+        {/* ABA: CLUBES */}
         {activeTab === 'clubes' && (
           <div className="space-y-6">
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
               <h2 className="text-2xl font-bold mb-2">Gestão de Clubes</h2>
-              <p className="text-sm text-gray-400 mb-6">Adicione novos clubes ao sistema. As estatísticas são processadas automaticamente agrupando os dados dos seus jogadores e relatórios de partidas.</p>
-              
+              <p className="text-sm text-gray-400 mb-6">Adicione novos clubes ao sistema.</p>
               <form onSubmit={handleAddTeam} className="flex flex-col md:flex-row gap-4">
                 <input type="text" placeholder="Nome do Novo Clube" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none focus:border-blue-500" />
                 <button type="submit" className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-lg">Adicionar Clube</button>
@@ -541,7 +544,7 @@ export default function App() {
                 <thead>
                   <tr className="border-b border-gray-800 text-gray-400 text-sm">
                     <th className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">Clube</th>
-                    <th className="p-3 text-center" title="Partidas (Soma das partidas do clube no histórico)">Partidas</th>
+                    <th className="p-3 text-center" title="Partidas">Partidas</th>
                     <th className="p-3 text-center text-blue-400">Golos</th>
                     <th className="p-3 text-center text-red-400">Golos Sofridos</th>
                     <th className="p-3 text-center">Assistências</th>
@@ -638,7 +641,7 @@ export default function App() {
                         <div>
                           <h4 className="text-lg font-bold flex items-center gap-2">
                             {player.nome}
-                            <button onClick={() => handleEditClick(player)} className="text-blue-500 hover:text-blue-400 p-1">✏️</button>
+                            <button onClick={() => handleEditClick(player)} className="text-blue-500 hover:text-blue-400 p-1" title={editingPlayerId === player.id ? "Concluir Edição" : "Editar Estatísticas e Info"}>✏️</button>
                             <button onClick={() => handleDeletePlayer(player.id, player.nome)} className="text-red-500 hover:text-red-400 p-1">🗑️</button>
                           </h4>
                           <p className="text-xs text-blue-400">{player.time_nome} • {player.categoria} • {player.posicao}</p>
@@ -648,19 +651,27 @@ export default function App() {
                           <p>Fat: {player.percentual_gordura}% | Max: {player.velocidade_maxima}km/h</p>
                         </div>
                       </div>
+                      
                       <div className="grid grid-cols-1 gap-1">
                         {ACOES_TATICAS.map(acao => (
                           <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
                             <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
-                            {['minutos', 'partidas'].includes(acao.id) ? (
-                              <input type="number" min="0" placeholder="0" value={player.acoes[acao.id] === '' ? '' : (player.acoes[acao.id] || 0)} onChange={(e) => handleSetGlobalAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetGlobalAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none" />
+                            
+                            {/* AQUI ESTÁ A LÓGICA DE OCULTAR/MOSTRAR OS BOTÕES DE EDIÇÃO */}
+                            {editingPlayerId === player.id ? (
+                              ['minutos', 'partidas'].includes(acao.id) ? (
+                                <input type="number" min="0" placeholder="0" value={player.acoes[acao.id] === '' ? '' : (player.acoes[acao.id] || 0)} onChange={(e) => handleSetGlobalAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetGlobalAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:border-blue-500" />
+                              ) : (
+                                <div className="flex space-x-1 items-center">
+                                  <button type="button" onClick={() => handleUpdateGlobalActions(player.id, acao.id, -1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold">-</button>
+                                  <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{player.acoes[acao.id] || 0}</span>
+                                  <button type="button" onClick={() => handleUpdateGlobalActions(player.id, acao.id, 1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-green-900/50 flex items-center justify-center font-bold">+</button>
+                                </div>
+                              )
                             ) : (
-                              <div className="flex space-x-1 items-center">
-                                <button onClick={() => handleUpdateGlobalActions(player.id, acao.id, -1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold">-</button>
-                                <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{player.acoes[acao.id] || 0}</span>
-                                <button onClick={() => handleUpdateGlobalActions(player.id, acao.id, 1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-green-900/50 flex items-center justify-center font-bold">+</button>
-                              </div>
+                              <span className="font-mono text-blue-400 font-bold text-sm pr-1">{player.acoes[acao.id] || 0}</span>
                             )}
+
                           </div>
                         ))}
                       </div>
@@ -682,13 +693,11 @@ export default function App() {
                 <input type="text" placeholder="Ex: Final do Campeonato vs Flamengo" required value={matchTitle} onChange={e => setMatchTitle(e.target.value)} className="w-full p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg mb-4" />
                 
                 <div className="flex flex-col md:flex-row gap-4 mb-6">
-                  {/* NOVO: SELEÇÃO DE CLUBE */}
                   <select value={matchTeam} onChange={(e) => { setMatchTeam(e.target.value); setMatchSquadIds([]); }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500">
                     <option value="">1. Selecionar Clube...</option>
                     {teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
 
-                  {/* SELEÇÃO DE JOGADORES (Filtra pelo clube selecionado) */}
                   <select disabled={!matchTeam} onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50">
                     <option value="">{matchTeam ? "2. Convocatória (Atletas)..." : "Selecione o clube primeiro"}</option>
                     {players.filter(p => p.time_nome === matchTeam && !matchSquadIds.includes(p.id)).sort((a,b) => a.nome.localeCompare(b.nome)).map(p => <option key={p.id} value={p.id}>{p.nome} ({p.posicao} / {p.categoria})</option>)}
