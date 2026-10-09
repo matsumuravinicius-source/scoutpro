@@ -33,7 +33,11 @@ export default function App() {
   const [matchHistory, setMatchHistory] = useState([]);
   
   const [editingPlayerId, setEditingPlayerId] = useState(null);
-  const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: 'Principal', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '' });
+  // Estado inicial atualizado com ano_nascimento
+  const [novoJogador, setNovoJogador] = useState({ 
+    nome: '', time_nome: '', categoria: 'Principal', posicao: '', 
+    altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' 
+  });
 
   const [matchSquadIds, setMatchSquadIds] = useState([]);
   const [isMatchActive, setIsMatchActive] = useState(false);
@@ -55,30 +59,20 @@ export default function App() {
   const [novaMetrica, setNovaMetrica] = useState({ nome: '', numerador: '', denominador: '' });
   const [selectedMetricId, setSelectedMetricId] = useState(savedMetrics[0]?.id || null);
 
-  // === VERIFICAR SESSÃO DE LOGIN ===
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
   }, []);
 
-  // === CARREGAR DADOS APENAS SE ESTIVER LOGADO ===
   useEffect(() => {
     if (session) buscarDados();
   }, [session]);
 
-  // === FUNÇÕES DE AUTENTICAÇÃO ===
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError(null);
-
     let error;
     if (isLoginMode) {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
@@ -88,16 +82,12 @@ export default function App() {
       error = signUpError;
       if (!error) alert("Conta criada com sucesso! Pode entrar no sistema.");
     }
-
     if (error) setAuthError(error.message);
     setAuthLoading(false);
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
+  const handleLogout = async () => await supabase.auth.signOut();
 
-  // === FUNÇÕES DO SISTEMA (Base de Dados, Live, etc.) ===
   async function buscarDados() {
     const { data: timesData } = await supabase.from('times').select('nome');
     if (timesData) setTeams(timesData.map(t => t.nome));
@@ -121,7 +111,9 @@ export default function App() {
     const payload = {
       nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria,
       posicao: novoJogador.posicao, pe_dominante: novoJogador.pe_dominante,
-      altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0,
+      altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, 
+      velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0,
+      ano_nascimento: parseInt(novoJogador.ano_nascimento) || null, // Grava o ano
     };
 
     if (editingPlayerId) {
@@ -146,14 +138,15 @@ export default function App() {
     setEditingPlayerId(player.id);
     setNovoJogador({
       nome: player.nome, time_nome: player.time_nome, categoria: player.categoria, posicao: player.posicao,
-      altura: player.altura, pe_dominante: player.pe_dominante, percentual_gordura: player.percentual_gordura, velocidade_maxima: player.velocidade_maxima
+      altura: player.altura, pe_dominante: player.pe_dominante, percentual_gordura: player.percentual_gordura, 
+      velocidade_maxima: player.velocidade_maxima, ano_nascimento: player.ano_nascimento || ''
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelarEdicao = () => {
     setEditingPlayerId(null);
-    setNovoJogador({ nome: '', time_nome: '', categoria: 'Principal', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '' });
+    setNovoJogador({ nome: '', time_nome: '', categoria: 'Principal', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
   };
 
   const handleDeletePlayer = async (playerId, playerName) => {
@@ -317,49 +310,35 @@ export default function App() {
 
   const getRankedPlayers = () => [...players].sort((a, b) => b.acoes[rankMetric] - a.acoes[rankMetric]);
 
-  // === RENDERIZAÇÃO: TELA DE LOGIN SE NÃO ESTIVER LOGADO ===
+  // Função para calcular a idade no cartão
+  const getIdade = (anoNasc) => {
+    if (!anoNasc) return '';
+    const idade = new Date().getFullYear() - anoNasc;
+    return `${idade} anos | `;
+  };
+
   if (!session) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col justify-center items-center p-4 font-sans text-white">
         <div className="w-full max-w-md bg-gray-900 rounded-xl border border-gray-800 shadow-2xl p-8">
           <h1 className="text-4xl font-black text-center text-blue-500 tracking-tighter mb-2">SCOUT<span className="text-white">PRO</span></h1>
-          <p className="text-center text-gray-400 mb-8">
-            {isLoginMode ? "Insira as suas credenciais para aceder ao sistema." : "Crie uma nova conta de analista."}
-          </p>
-
+          <p className="text-center text-gray-400 mb-8">{isLoginMode ? "Insira as suas credenciais para aceder ao sistema." : "Crie uma nova conta de analista."}</p>
           {authError && <div className="bg-red-900/50 border border-red-900 text-red-300 p-3 rounded mb-4 text-sm">{authError}</div>}
-
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">E-mail</label>
-              <input 
-                type="email" required placeholder="seu@email.com"
-                value={authEmail} onChange={e => setAuthEmail(e.target.value)}
-                className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+              <input type="email" required placeholder="seu@email.com" value={authEmail} onChange={e => setAuthEmail(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Palavra-passe</label>
-              <input 
-                type="password" required placeholder="********"
-                value={authPassword} onChange={e => setAuthPassword(e.target.value)}
-                className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+              <input type="password" required placeholder="********" value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
             </div>
-            
-            <button 
-              type="submit" disabled={authLoading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 mt-4"
-            >
+            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 mt-4">
               {authLoading ? "Aguarde..." : (isLoginMode ? "Entrar" : "Registar e Entrar")}
             </button>
           </form>
-
           <div className="mt-6 text-center border-t border-gray-800 pt-6">
-            <button 
-              onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }}
-              className="text-sm text-gray-400 hover:text-white"
-            >
+            <button onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} className="text-sm text-gray-400 hover:text-white">
               {isLoginMode ? "Ainda não tem conta? Criar nova conta." : "Já tem conta? Fazer Login."}
             </button>
           </div>
@@ -368,13 +347,11 @@ export default function App() {
     );
   }
 
-  // === RENDERIZAÇÃO: DASHBOARD (Se estiver logado) ===
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans pb-10">
       <nav className="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-20 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
           <h1 className="text-2xl font-black text-blue-500 tracking-tighter">SCOUT<span className="text-white">PRO</span></h1>
-          
           <div className="flex flex-wrap justify-center gap-2">
             {[
               { id: 'scout', label: 'Base de Dados' },
@@ -384,20 +361,14 @@ export default function App() {
               { id: 'analise', label: 'Análise Avançada' },
               { id: 'comparativo', label: 'Comparativo' }
             ].map(tab => (
-              <button 
-                key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-2 rounded font-bold transition text-sm ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-              >
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-3 py-2 rounded font-bold transition text-sm ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
                 {tab.label}
               </button>
             ))}
           </div>
-
           <div className="flex items-center gap-4 border-t lg:border-t-0 lg:border-l border-gray-800 pt-4 lg:pt-0 lg:pl-4">
             <span className="text-sm text-gray-400 truncate max-w-[150px]">{session.user.email}</span>
-            <button onClick={handleLogout} className="px-4 py-2 bg-red-900/40 text-red-400 hover:bg-red-900/60 rounded text-sm font-bold border border-red-900/50 transition">
-              Sair
-            </button>
+            <button onClick={handleLogout} className="px-4 py-2 bg-red-900/40 text-red-400 hover:bg-red-900/60 rounded text-sm font-bold border border-red-900/50 transition">Sair</button>
           </div>
         </div>
       </nav>
@@ -431,7 +402,9 @@ export default function App() {
                     <option value="Ambidestro">Ambidestro</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                {/* Linha Nova: Dividida em 4 colunas em telas médias */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <input type="number" placeholder="Ano Nasc." value={novoJogador.ano_nascimento} onChange={e => setNovoJogador({...novoJogador, ano_nascimento: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700 text-sm" />
                   <input type="number" step="0.01" placeholder="Alt (m)" value={novoJogador.altura} onChange={e => setNovoJogador({...novoJogador, altura: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700 text-sm" />
                   <input type="number" step="0.1" placeholder="Gord (%)" value={novoJogador.percentual_gordura} onChange={e => setNovoJogador({...novoJogador, percentual_gordura: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700 text-sm" />
                   <input type="number" step="0.1" placeholder="Vel (km/h)" value={novoJogador.velocidade_maxima} onChange={e => setNovoJogador({...novoJogador, velocidade_maxima: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700 text-sm" />
@@ -456,11 +429,11 @@ export default function App() {
                       <p className="text-xs text-blue-400">{player.time_nome} • {player.categoria} • {player.posicao}</p>
                     </div>
                     <div className="text-right text-xs text-gray-400">
-                      <p>{player.altura}m | {player.pe_dominante}</p>
+                      {/* Mostra a idade real baseada no ano de nascimento inserido */}
+                      <p>{getIdade(player.ano_nascimento)}{player.altura}m | {player.pe_dominante}</p>
                       <p>Fat: {player.percentual_gordura}% | Max: {player.velocidade_maxima}km/h</p>
                     </div>
                   </div>
-                  
                   <div className="grid grid-cols-1 gap-1">
                     {ACOES_TATICAS.map(acao => (
                       <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
