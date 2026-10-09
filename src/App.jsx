@@ -45,6 +45,7 @@ export default function App() {
   });
 
   // === ESTADOS DO MODO JOGO (LIVE) ===
+  const [matchTeam, setMatchTeam] = useState(''); // NOVO: Guarda o clube selecionado para a partida
   const [matchSquadIds, setMatchSquadIds] = useState([]);
   const [isMatchActive, setIsMatchActive] = useState(false);
   const [matchTitle, setMatchTitle] = useState('');
@@ -55,7 +56,7 @@ export default function App() {
   const [currentPeriod, setCurrentPeriod] = useState(1);
   const [periodLogs, setPeriodLogs] = useState([]);
   const [matchEventLog, setMatchEventLog] = useState([]);
-  const [opponentGoals, setOpponentGoals] = useState(0); // Novo: Golos do Adversário
+  const [opponentGoals, setOpponentGoals] = useState(0);
 
   // === ESTADOS DE EDIÇÃO (HISTÓRICO) ===
   const [editingMatchId, setEditingMatchId] = useState(null);
@@ -74,12 +75,10 @@ export default function App() {
   const [novaMetrica, setNovaMetrica] = useState({ nome: '', numerador: '', denominador: '' });
   const [selectedMetricId, setSelectedMetricId] = useState(savedMetrics[0]?.id || null);
 
-  // Derivar categorias únicas para o Datalist e Filtros
   const uniqueCategories = [...new Set(players.map(p => p.categoria).filter(Boolean))];
   if (!uniqueCategories.includes('Principal')) uniqueCategories.push('Principal');
   if (!uniqueCategories.includes('Sub-20')) uniqueCategories.push('Sub-20');
 
-  // Aplicar Filtros aos Jogadores
   const displayedPlayers = players.filter(p => {
     if (filterTeam && p.time_nome !== filterTeam) return false;
     if (filterCategory && p.categoria !== filterCategory) return false;
@@ -324,13 +323,13 @@ export default function App() {
       eventLog: matchEventLog, 
       periodLogs: periodLogs, 
       gols_sofridos: opponentGoals,
-      equipes: squadTeams // Relacionamento com as equipas para extrair stats
+      equipes: squadTeams 
     };
 
     const { data, error } = await supabase.from('partidas').insert([{ titulo: matchTitle, dados: dadosTratados }]).select();
     if (!error && data) {
       setMatchHistory([data[0], ...matchHistory]);
-      setIsMatchActive(false); setMatchTitle(''); setMatchStats({}); setMatchSquadIds([]);
+      setIsMatchActive(false); setMatchTitle(''); setMatchStats({}); setMatchSquadIds([]); setMatchTeam('');
       setActiveTab('historico');
     }
   };
@@ -518,7 +517,6 @@ export default function App() {
         </div>
       </nav>
 
-      {/* DATALIST para Categorias (Reutilizável nos inputs) */}
       <datalist id="categorias-list">
         {uniqueCategories.map(c => <option key={c} value={c} />)}
       </datalist>
@@ -607,7 +605,6 @@ export default function App() {
                     <option value="">Equipa/Clube...</option>
                     {teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  {/* Categoria passou a ser texto livre com Datalist */}
                   <input type="text" list="categorias-list" placeholder="Categoria (Ex: Sub-17)" required value={novoJogador.categoria} onChange={e => setNovoJogador({...novoJogador, categoria: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -681,19 +678,25 @@ export default function App() {
             {!isMatchActive ? (
               <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-3xl mx-auto">
                 <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-                <p className="text-gray-400 mb-6">Convoque os jogadores. Ações cruciais e estatísticas do adversário serão guardadas na linha do tempo.</p>
+                <p className="text-gray-400 mb-6">Selecione o clube que vai analisar nesta partida e depois convoque os jogadores.</p>
                 <input type="text" placeholder="Ex: Final do Campeonato vs Flamengo" required value={matchTitle} onChange={e => setMatchTitle(e.target.value)} className="w-full p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg mb-4" />
                 
-                <div className="flex flex-col gap-4 mb-6">
-                  {/* Select com Clube/Categoria visível para facilitar convocação */}
-                  <select onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none">
-                    <option value="">+ Selecionar atleta para o jogo...</option>
-                    {players.filter(p => !matchSquadIds.includes(p.id)).sort((a,b) => a.time_nome.localeCompare(b.time_nome)).map(p => <option key={p.id} value={p.id}>{p.nome} ({p.posicao} - {p.time_nome} / {p.categoria})</option>)}
+                <div className="flex flex-col md:flex-row gap-4 mb-6">
+                  {/* NOVO: SELEÇÃO DE CLUBE */}
+                  <select value={matchTeam} onChange={(e) => { setMatchTeam(e.target.value); setMatchSquadIds([]); }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500">
+                    <option value="">1. Selecionar Clube...</option>
+                    {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+
+                  {/* SELEÇÃO DE JOGADORES (Filtra pelo clube selecionado) */}
+                  <select disabled={!matchTeam} onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50">
+                    <option value="">{matchTeam ? "2. Convocatória (Atletas)..." : "Selecione o clube primeiro"}</option>
+                    {players.filter(p => p.time_nome === matchTeam && !matchSquadIds.includes(p.id)).sort((a,b) => a.nome.localeCompare(b.nome)).map(p => <option key={p.id} value={p.id}>{p.nome} ({p.posicao} / {p.categoria})</option>)}
                   </select>
                 </div>
                 
                 <div className="flex flex-wrap gap-2 mb-8 min-h-[50px] p-4 bg-gray-950 rounded-lg border border-gray-800">
-                  {matchSquadIds.length === 0 && <span className="text-gray-500">Nenhum jogador convocado (0/23).</span>}
+                  {matchSquadIds.length === 0 && <span className="text-gray-500">Nenhum jogador convocado.</span>}
                   {matchSquadIds.map(id => {
                     const p = players.find(player => player.id === id);
                     if(!p) return null;
@@ -725,7 +728,6 @@ export default function App() {
                     </div>
                     <button onClick={handleFinalizarTempo} disabled={currentPeriod > 4} className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 py-2 rounded-lg font-bold mb-6 transition disabled:opacity-50">⏹ Finalizar {currentPeriod}º Tempo</button>
 
-                    {/* NOVO: Painel de Controlo do Adversário */}
                     <div className="w-full bg-gray-950 rounded-lg p-4 border border-red-900/50 mb-6">
                       <h4 className="text-red-400 font-bold text-sm mb-3 flex items-center gap-2">🛡️ Ações do Adversário</h4>
                       <div className="flex justify-between items-center bg-gray-900 px-3 py-2 rounded border border-gray-800">
@@ -762,7 +764,7 @@ export default function App() {
                           <div key={acao.id} className={`flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave'].includes(acao.id) ? 'border-l-2 border-l-blue-500/30' : ''}`}>
                             <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
                             {acao.id === 'minutos' ? (
-                              <input type="number" min="0" placeholder="0" value={matchStats[player.id]?.[acao.id] === '' ? '' : (matchStats[player.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none" />
+                              <input type="number" min="0" placeholder="0" value={matchStats[player.id]?.[acao.id] === '' ? '' : (matchStats[player.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500" />
                             ) : (
                               <div className="flex space-x-1 items-center">
                                 <button onClick={() => handleLiveAction(player.id, acao.id, -1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold">-</button>
@@ -947,10 +949,10 @@ export default function App() {
           </div>
         )}
 
-        {/* ABA: COMPARATIVO (mantida base) */}
+        {/* ABA: COMPARATIVO */}
         {activeTab === 'comparativo' && (
           <div className="bg-gray-900 p-6 rounded-xl border border-gray-800">
-            <h2 className="text-2xl font-bold mb-6">Frente a Frente</h2>
+            <h2 className="text-2xl font-bold mb-6">Frente a Frente Global</h2>
             <div className="grid grid-cols-2 gap-4 mb-8">
               <select value={compareA} onChange={e => setCompareA(e.target.value)} className="p-3 bg-gray-950 rounded border border-gray-700 text-lg outline-none">
                 <option value="">Selecione o Atleta A...</option>{players.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.time_nome})</option>)}
