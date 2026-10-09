@@ -33,7 +33,6 @@ export default function App() {
   const [matchHistory, setMatchHistory] = useState([]);
   
   const [editingPlayerId, setEditingPlayerId] = useState(null);
-  // Estado inicial atualizado com ano_nascimento
   const [novoJogador, setNovoJogador] = useState({ 
     nome: '', time_nome: '', categoria: 'Principal', posicao: '', 
     altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' 
@@ -44,6 +43,10 @@ export default function App() {
   const [matchTitle, setMatchTitle] = useState('');
   const [matchStats, setMatchStats] = useState({});
   const [expandedMatch, setExpandedMatch] = useState(null);
+
+  // === ESTADOS DE EDIÇÃO DE PARTIDA (HISTÓRICO) ===
+  const [editingMatchId, setEditingMatchId] = useState(null);
+  const [editMatchData, setEditMatchData] = useState(null);
 
   const [rankMetric, setRankMetric] = useState('gols');
   const [compareA, setCompareA] = useState('');
@@ -106,6 +109,7 @@ export default function App() {
     if (partidasData) setMatchHistory(partidasData);
   }
 
+  // === FUNÇÕES DA BASE DE DADOS DE ATLETAS ===
   const handleSavePlayer = async (e) => {
     e.preventDefault();
     const payload = {
@@ -113,7 +117,7 @@ export default function App() {
       posicao: novoJogador.posicao, pe_dominante: novoJogador.pe_dominante,
       altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, 
       velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0,
-      ano_nascimento: parseInt(novoJogador.ano_nascimento) || null, // Grava o ano
+      ano_nascimento: parseInt(novoJogador.ano_nascimento) || null,
     };
 
     if (editingPlayerId) {
@@ -150,8 +154,7 @@ export default function App() {
   };
 
   const handleDeletePlayer = async (playerId, playerName) => {
-    const confirmar = window.confirm(`Tem certeza que deseja excluir o atleta "${playerName}"? Esta ação não pode ser desfeita.`);
-    if (confirmar) {
+    if (window.confirm(`Tem certeza que deseja excluir o atleta "${playerName}"? Esta ação não pode ser desfeita.`)) {
       const { error } = await supabase.from('jogadores').delete().eq('id', playerId);
       if (!error) {
         setPlayers(players.filter(p => p.id !== playerId));
@@ -181,6 +184,7 @@ export default function App() {
     }
   };
 
+  // === FUNÇÕES DA PARTIDA AO VIVO (LIVE) ===
   const toggleMatchSquad = (playerId) => {
     if (matchSquadIds.includes(playerId)) {
       setMatchSquadIds(matchSquadIds.filter(id => id !== playerId));
@@ -275,6 +279,126 @@ export default function App() {
     }
   };
 
+  // === NOVAS FUNÇÕES: EDITAR / EXCLUIR PARTIDA NO HISTÓRICO ===
+  const handleEditMatchClick = (partida) => {
+    setEditingMatchId(partida.id);
+    setEditMatchData({
+      titulo: partida.titulo,
+      dados: JSON.parse(JSON.stringify(partida.dados)) // Cria uma cópia isolada para editar
+    });
+    setExpandedMatch(partida.id); // Força a aba a abrir
+  };
+
+  const cancelMatchEdit = () => {
+    setEditingMatchId(null);
+    setEditMatchData(null);
+  };
+
+  const handleUpdateMatchEditAction = (playerId, actionId, incrementValue) => {
+    setEditMatchData(prev => {
+      const currentVal = parseInt(prev.dados[playerId]?.[actionId]) || 0;
+      const newVal = Math.max(0, currentVal + incrementValue);
+      return {
+        ...prev,
+        dados: { ...prev.dados, [playerId]: { ...(prev.dados[playerId] || {}), [actionId]: newVal } }
+      };
+    });
+  };
+
+  const handleSetMatchEditAction = (playerId, actionId, value) => {
+    const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0);
+    setEditMatchData(prev => ({
+      ...prev,
+      dados: { ...prev.dados, [playerId]: { ...(prev.dados[playerId] || {}), [actionId]: rawValue } }
+    }));
+  };
+
+  const saveMatchEdit = async (partidaId) => {
+    const originalMatch = matchHistory.find(m => m.id === partidaId);
+    if (!originalMatch) return;
+
+    // Converte vazios em 0
+    const dadosTratados = { ...editMatchData.dados };
+    Object.keys(dadosTratados).forEach(pId => {
+      if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0;
+    });
+
+    // Calcula a diferença entre a edição nova e os dados originais da partida
+    const diffs = {};
+    const allPlayerIds = new Set([...Object.keys(originalMatch.dados), ...Object.keys(dadosTratados)]);
+    
+    allPlayerIds.forEach(pId => {
+      const oldStats = originalMatch.dados[pId] || {};
+      const newStats = dadosTratados[pId] || {};
+      diffs[pId] = {};
+      
+      ACOES_TATICAS.forEach(acao => {
+        const oldVal = parseInt(oldStats[acao.id]) || 0;
+        const newVal = parseInt(newStats[acao.id]) || 0;
+        const dif = newVal - oldVal;
+        if (dif !== 0) diffs[pId][acao.id] = dif;
+      });
+    });
+
+    // Salva a partida editada no Supabase
+    const { error: matchError } = await supabase.from('partidas').update({ titulo: editMatchData.titulo, dados: dadosTratados }).eq('id', partidaId);
+    if (matchError) return alert("Erro ao salvar a edição da partida.");
+
+    // Atualiza os atributos globais de cada jogador de acordo com a diferença matemática
+    let updatedPlayers = [...players];
+    for (const pId of Object.keys(diffs)) {
+      const playerDiffs = diffs[pId];
+      if (Object.keys(playerDiffs).length > 0) {
+        const pIndex = updatedPlayers.findIndex(p => p.id === pId);
+        if (pIndex !== -1) {
+          const player = updatedPlayers[pIndex];
+          const novasAcoesGlobais = { ...player.acoes };
+          
+          Object.keys(playerDiffs).forEach(actionId => {
+            novasAcoesGlobais[actionId] = Math.max(0, (parseInt(novasAcoesGlobais[actionId]) || 0) + playerDiffs[actionId]);
+          });
+
+          updatedPlayers[pIndex] = { ...player, acoes: novasAcoesGlobais };
+          await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', pId);
+        }
+      }
+    }
+
+    setPlayers(updatedPlayers);
+    setMatchHistory(matchHistory.map(m => m.id === partidaId ? { ...m, titulo: editMatchData.titulo, dados: dadosTratados } : m));
+    cancelMatchEdit();
+  };
+
+  const handleDeleteMatch = async (partidaId, partidaTitulo) => {
+    if (window.confirm(`ATENÇÃO! Excluir a partida "${partidaTitulo}"?\nOs dados que aconteceram neste jogo serão SUBTRAÍDOS do histórico global dos atletas para manter tudo certo.`)) {
+      const originalMatch = matchHistory.find(m => m.id === partidaId);
+      if (originalMatch) {
+        let updatedPlayers = [...players];
+        for (const pId of Object.keys(originalMatch.dados)) {
+          const oldStats = originalMatch.dados[pId] || {};
+          const pIndex = updatedPlayers.findIndex(p => p.id === pId);
+          if (pIndex !== -1) {
+            const player = updatedPlayers[pIndex];
+            const novasAcoesGlobais = { ...player.acoes };
+            
+            ACOES_TATICAS.forEach(acao => {
+              const oldVal = parseInt(oldStats[acao.id]) || 0;
+              if (oldVal > 0) novasAcoesGlobais[acao.id] = Math.max(0, (parseInt(novasAcoesGlobais[acao.id]) || 0) - oldVal);
+            });
+
+            updatedPlayers[pIndex] = { ...player, acoes: novasAcoesGlobais };
+            await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', pId);
+          }
+        }
+        setPlayers(updatedPlayers);
+      }
+      
+      await supabase.from('partidas').delete().eq('id', partidaId);
+      setMatchHistory(matchHistory.filter(m => m.id !== partidaId));
+    }
+  };
+
+  // === FUNÇÕES DE ANÁLISE ===
   const handleSaveCustomMetric = (e) => {
     e.preventDefault();
     if (!novaMetrica.nome || !novaMetrica.numerador || !novaMetrica.denominador) return;
@@ -310,13 +434,13 @@ export default function App() {
 
   const getRankedPlayers = () => [...players].sort((a, b) => b.acoes[rankMetric] - a.acoes[rankMetric]);
 
-  // Função para calcular a idade no cartão
   const getIdade = (anoNasc) => {
     if (!anoNasc) return '';
     const idade = new Date().getFullYear() - anoNasc;
     return `${idade} anos | `;
   };
 
+  // === RENDERIZAÇÃO ===
   if (!session) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col justify-center items-center p-4 font-sans text-white">
@@ -402,7 +526,6 @@ export default function App() {
                     <option value="Ambidestro">Ambidestro</option>
                   </select>
                 </div>
-                {/* Linha Nova: Dividida em 4 colunas em telas médias */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <input type="number" placeholder="Ano Nasc." value={novoJogador.ano_nascimento} onChange={e => setNovoJogador({...novoJogador, ano_nascimento: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700 text-sm" />
                   <input type="number" step="0.01" placeholder="Alt (m)" value={novoJogador.altura} onChange={e => setNovoJogador({...novoJogador, altura: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700 text-sm" />
@@ -429,7 +552,6 @@ export default function App() {
                       <p className="text-xs text-blue-400">{player.time_nome} • {player.categoria} • {player.posicao}</p>
                     </div>
                     <div className="text-right text-xs text-gray-400">
-                      {/* Mostra a idade real baseada no ano de nascimento inserido */}
                       <p>{getIdade(player.ano_nascimento)}{player.altura}m | {player.pe_dominante}</p>
                       <p>Fat: {player.percentual_gordura}% | Max: {player.velocidade_maxima}km/h</p>
                     </div>
@@ -609,7 +731,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ABA: HISTÓRICO DE PARTIDAS */}
+        {/* ABA: HISTÓRICO DE PARTIDAS (AGORA COM EDIÇÃO E EXCLUSÃO) */}
         {activeTab === 'historico' && (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold mb-6">Relatórios de Partidas Salvas</h2>
@@ -617,29 +739,91 @@ export default function App() {
               <div className="text-center py-20 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">Nenhum relatório de partida encontrado.</div>
             ) : (
               matchHistory.map(partida => (
-                <div key={partida.id} className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-                  <div className="p-4 bg-gray-800/50 cursor-pointer hover:bg-gray-800 flex justify-between items-center" onClick={() => setExpandedMatch(expandedMatch === partida.id ? null : partida.id)}>
-                    <div>
-                      <h3 className="font-bold text-lg text-blue-400">{partida.titulo}</h3>
-                      <p className="text-sm text-gray-400">Criado em: {new Date(partida.criado_em).toLocaleDateString()} às {new Date(partida.criado_em).toLocaleTimeString()}</p>
+                <div key={partida.id} className={`bg-gray-900 rounded-xl border transition ${editingMatchId === partida.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
+                  <div className="p-4 bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800/50 gap-4">
+                    
+                    {/* CABEÇALHO DA PARTIDA (Visualizar vs Editar) */}
+                    {editingMatchId === partida.id ? (
+                      <div className="flex-1 w-full">
+                        <input 
+                          type="text" 
+                          value={editMatchData.titulo} 
+                          onChange={e => setEditMatchData({...editMatchData, titulo: e.target.value})}
+                          className="w-full p-2 bg-gray-950 rounded border border-gray-700 text-blue-400 font-bold outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <h3 className="font-bold text-lg text-blue-400">{partida.titulo}</h3>
+                        <p className="text-sm text-gray-400">Criado em: {new Date(partida.criado_em).toLocaleDateString()} às {new Date(partida.criado_em).toLocaleTimeString()}</p>
+                      </div>
+                    )}
+
+                    {/* BOTÕES DE AÇÃO */}
+                    <div className="flex items-center gap-3">
+                      {editingMatchId === partida.id ? (
+                        <>
+                          <button onClick={() => saveMatchEdit(partida.id)} className="text-green-500 hover:text-green-400 font-bold px-2 py-1 bg-green-900/20 rounded">Salvar Correção</button>
+                          <button onClick={cancelMatchEdit} className="text-gray-400 hover:text-gray-300 px-2 py-1">Cancelar</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => handleEditMatchClick(partida)} className="text-blue-500 hover:text-blue-400 p-1 bg-blue-900/20 rounded" title="Editar Partida">✏️</button>
+                          <button onClick={() => handleDeleteMatch(partida.id, partida.titulo)} className="text-red-500 hover:text-red-400 p-1 bg-red-900/20 rounded" title="Excluir Partida">🗑️</button>
+                          <span className="text-gray-500 cursor-pointer text-sm font-bold ml-2" onClick={() => setExpandedMatch(expandedMatch === partida.id ? null : partida.id)}>
+                            {expandedMatch === partida.id ? 'Ocultar ▲' : 'Ver ▼'}
+                          </span>
+                        </>
+                      )}
                     </div>
-                    <span className="text-gray-500">{expandedMatch === partida.id ? 'Ocultar Relatório ▲' : 'Ver Relatório ▼'}</span>
                   </div>
+                  
+                  {/* TABELA DE DADOS (Visualizar vs Editar) */}
                   {expandedMatch === partida.id && (
                     <div className="p-4 overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
+                      <table className="w-full text-left border-collapse min-w-max">
                         <thead>
                           <tr className="border-b border-gray-800 text-gray-400 text-sm">
-                            <th className="p-2">Atleta</th>
+                            <th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">Atleta</th>
                             {ACOES_TATICAS.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,3)}.</th>)}
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.keys(partida.dados).map(playerId => {
+                          {Object.keys(editingMatchId === partida.id ? editMatchData.dados : partida.dados).map(playerId => {
                             const p = players.find(x => x.id === playerId) || { nome: 'Atleta Removido' };
+                            
+                            // Se estivermos em MODO DE EDIÇÃO
+                            if (editingMatchId === partida.id) {
+                              return (
+                                <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
+                                  <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
+                                  {ACOES_TATICAS.map(a => (
+                                    <td key={a.id} className="p-1 text-center">
+                                      {['minutos', 'partidas'].includes(a.id) ? (
+                                        <input 
+                                          type="number" min="0" placeholder="0"
+                                          value={editMatchData.dados[playerId]?.[a.id] === '' ? '' : (editMatchData.dados[playerId]?.[a.id] || 0)}
+                                          onChange={(e) => handleSetMatchEditAction(playerId, a.id, e.target.value)}
+                                          onBlur={(e) => { if (e.target.value === '') handleSetMatchEditAction(playerId, a.id, '0'); }}
+                                          className="w-12 p-1 text-center bg-gray-950 text-blue-400 font-bold text-xs rounded border border-gray-700 outline-none"
+                                        />
+                                      ) : (
+                                        <div className="flex space-x-1 items-center justify-center">
+                                          <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, -1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded flex items-center justify-center font-bold text-xs hover:bg-red-900/50">-</button>
+                                          <span className="font-mono w-4 text-center text-blue-400 font-bold text-xs">{editMatchData.dados[playerId]?.[a.id] || 0}</span>
+                                          <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, 1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded flex items-center justify-center font-bold text-xs hover:bg-green-900/50">+</button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            }
+
+                            // MODO DE VISUALIZAÇÃO PADRÃO
                             return (
                               <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
-                                <td className="p-2 font-bold">{p.nome}</td>
+                                <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
                                 {ACOES_TATICAS.map(a => (
                                   <td key={a.id} className="p-2 text-center font-mono text-gray-300">{partida.dados[playerId]?.[a.id] || 0}</td>
                                 ))}
