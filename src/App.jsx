@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import Login from './components/Login';
+import Navbar from './components/Navbar';
 
-const ACOES_TATICAS = [
+export const ACOES_TATICAS = [
   { id: 'partidas', nome: 'Partidas' },
   { id: 'minutos', nome: 'Minutos Jogados' },
   { id: 'gols', nome: 'Golos' },
@@ -18,13 +20,7 @@ const ACOES_TATICAS = [
 ];
 
 export default function App() {
-  // === ESTADOS DE AUTENTICAÇÃO ===
   const [session, setSession] = useState(null);
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [isLoginMode, setIsLoginMode] = useState(true);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState(null);
 
   // === ESTADOS DO SISTEMA ===
   const [activeTab, setActiveTab] = useState('scout');
@@ -106,23 +102,6 @@ export default function App() {
     return `${m}:${s}`;
   };
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setAuthLoading(true); setAuthError(null);
-    let error;
-    if (isLoginMode) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-      error = signInError;
-    } else {
-      const { error: signUpError } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
-      error = signUpError;
-      if (!error) alert("Conta criada com sucesso!");
-    }
-    if (error) setAuthError(error.message);
-    setAuthLoading(false);
-  };
-  const handleLogout = async () => await supabase.auth.signOut();
-
   async function buscarDados() {
     const { data: timesData } = await supabase.from('times').select('nome').order('nome');
     if (timesData) setTeams(timesData.map(t => t.nome));
@@ -190,6 +169,7 @@ export default function App() {
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  
   const cancelarEdicao = () => {
     setEditingPlayerId(null);
     setNovoJogador({ nome: '', time_nome: '', categoria: '', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
@@ -216,6 +196,7 @@ export default function App() {
     setPlayers(players.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p));
     if (typeof rawValue === 'number') await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
   };
+  
   const handleUpdateGlobalActions = async (playerId, actionId, incrementValue) => {
     const player = players.find(p => p.id === playerId);
     const currentVal = parseInt(player.acoes[actionId]) || 0;
@@ -476,49 +457,16 @@ export default function App() {
     </div>
   );
 
-  // === RENDERIZAÇÃO DE AUTENTICAÇÃO ===
+  // === RENDERIZAÇÃO PRINCIPAL ===
+  // Se não houver sessão, mostra o componente Login que criámos
   if (!session) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex flex-col justify-center items-center p-4 font-sans text-white">
-        <div className="w-full max-w-md bg-gray-900 rounded-xl border border-gray-800 shadow-2xl p-8">
-          <h1 className="text-4xl font-black text-center text-blue-500 tracking-tighter mb-2">SCOUT<span className="text-white">PRO</span></h1>
-          <p className="text-center text-gray-400 mb-8">{isLoginMode ? "Insira as suas credenciais para aceder ao sistema." : "Crie uma nova conta."}</p>
-          {authError && <div className="bg-red-900/50 border border-red-900 text-red-300 p-3 rounded mb-4 text-sm">{authError}</div>}
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div><label className="block text-sm text-gray-400 mb-1">E-mail</label><input type="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500" /></div>
-            <div><label className="block text-sm text-gray-400 mb-1">Palavra-passe</label><input type="password" required value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg outline-none focus:border-blue-500" /></div>
-            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 mt-4">{authLoading ? "Aguarde..." : (isLoginMode ? "Entrar" : "Registar e Entrar")}</button>
-          </form>
-          <div className="mt-6 text-center border-t border-gray-800 pt-6"><button onClick={() => { setIsLoginMode(!isLoginMode); setAuthError(null); }} className="text-sm text-gray-400 hover:text-white">{isLoginMode ? "Criar nova conta." : "Já tem conta? Fazer Login."}</button></div>
-        </div>
-      </div>
-    );
+    return <Login />;
   }
 
+  // Se houver sessão, mostra a Navbar que criámos e o resto da aplicação
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans pb-10">
-      <nav className="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-30 shadow-md">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
-          <h1 className="text-2xl font-black text-blue-500 tracking-tighter">SCOUT<span className="text-white">PRO</span></h1>
-          <div className="flex flex-wrap justify-center gap-2">
-            {[
-              { id: 'scout', label: 'Base de Dados' }, 
-              { id: 'clubes', label: 'Clubes' }, 
-              { id: 'live', label: '🔴 Modo Jogo' }, 
-              { id: 'historico', label: 'Histórico' }, 
-              { id: 'leaderboard', label: 'Ranking' }, 
-              { id: 'analise', label: 'Análise Avançada' }, 
-              { id: 'comparativo', label: 'Comparativo' }
-            ].map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-3 py-2 rounded font-bold transition text-sm ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{tab.label}</button>
-            ))}
-          </div>
-          <div className="flex items-center gap-4 border-t lg:border-t-0 lg:border-l border-gray-800 pt-4 lg:pt-0 lg:pl-4">
-            <span className="text-sm text-gray-400 truncate max-w-[150px]">{session.user.email}</span>
-            <button onClick={handleLogout} className="px-4 py-2 bg-red-900/40 text-red-400 hover:bg-red-900/60 rounded text-sm font-bold border border-red-900/50 transition">Sair</button>
-          </div>
-        </div>
-      </nav>
+      <Navbar session={session} activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <datalist id="categorias-list">
         {uniqueCategories.map(c => <option key={c} value={c} />)}
@@ -877,9 +825,9 @@ export default function App() {
                   
                   {expandedMatch === partida.id && (
                     <div className="p-4">
+                      {/* === AQUI ESTÁ A LINHA DO TEMPO RESTAURADA === */}
                       {partida.dados._meta && (
                          <div className="mb-6 space-y-4">
-                            {/* LINHA SUPERIOR: Tempos e Golos Sofridos */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {partida.dados._meta.periodLogs?.length > 0 && (
                                  <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
@@ -897,10 +845,10 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* LINHA INFERIOR: Linha do Tempo (Event Log) */}
+                            {/* LINHA DO TEMPO */}
                             {partida.dados._meta.eventLog?.length > 0 && (
                                <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-48 overflow-y-auto">
-                                 <h4 className="text-gray-400 font-bold text-sm mb-2">⏱️ Linha do Tempo:</h4>
+                                 <h4 className="text-gray-400 font-bold text-sm mb-2">⏱️ Linha do Tempo (Event Log):</h4>
                                  {partida.dados._meta.eventLog.map((l, i) => <div key={i} className="text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1 mb-1 bg-gray-900/50">{l}</div>)}
                                </div>
                             )}
