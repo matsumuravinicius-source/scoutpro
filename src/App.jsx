@@ -35,7 +35,6 @@ export const ACOES_GOLEIRO = [
   { id: 'gols_sofridos', nome: 'Gols Sofridos' }
 ];
 
-// Uma lista combinada apenas para os Cabeçalhos das Tabelas Gerais
 export const TODAS_ACOES = [...new Map([...ACOES_LINHA, ...ACOES_GOLEIRO].map(item => [item.id, item])).values()];
 
 export default function App() {
@@ -52,7 +51,6 @@ export default function App() {
   const [newTeamName, setNewTeamName] = useState('');
   const [editingPlayerId, setEditingPlayerId] = useState(null);
   const [expandedPlayers, setExpandedPlayers] = useState([]); 
-  // Estado de novo jogador atualizado para Setor e Funções (Array)
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
   const [matchTeam, setMatchTeam] = useState('');
@@ -71,9 +69,22 @@ export default function App() {
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [editMatchData, setEditMatchData] = useState(null);
 
-  const [rankMetric, setRankMetric] = useState('gols');
+  // === ESTADOS DO COMPARATIVO ===
   const [compareA, setCompareA] = useState('');
+  const [filterTeamA, setFilterTeamA] = useState('');
+  const [filterCategoryA, setFilterCategoryA] = useState('');
+  const [filterSectorA, setFilterSectorA] = useState('');
+
   const [compareB, setCompareB] = useState('');
+  const [filterTeamB, setFilterTeamB] = useState('');
+  const [filterCategoryB, setFilterCategoryB] = useState('');
+  const [filterSectorB, setFilterSectorB] = useState('');
+
+  const [showSectorWarning, setShowSectorWarning] = useState(false);
+  const [dismissedWarningFor, setDismissedWarningFor] = useState('');
+
+  // === ESTADOS DE ANÁLISE ===
+  const [rankMetric, setRankMetric] = useState('gols');
   const [savedMetrics, setSavedMetrics] = useState(() => {
     const localData = localStorage.getItem('scoutpro_custom_metrics');
     return localData ? JSON.parse(localData) : [{ id: 'gols_por_minuto', nome: 'Golos por Minuto Jog.', numerador: 'gols', denominador: 'minutos' }];
@@ -90,6 +101,37 @@ export default function App() {
     if (filterCategory && p.categoria !== filterCategory) return false;
     return true;
   });
+
+  // Filtros dinâmicos para os Dropdowns do Comparativo
+  const filteredPlayersA = players.filter(p => {
+    if (filterTeamA && p.time_nome !== filterTeamA) return false;
+    if (filterCategoryA && p.categoria !== filterCategoryA) return false;
+    if (filterSectorA && p.setor !== filterSectorA) return false;
+    return true;
+  });
+
+  const filteredPlayersB = players.filter(p => {
+    if (filterTeamB && p.time_nome !== filterTeamB) return false;
+    if (filterCategoryB && p.categoria !== filterCategoryB) return false;
+    if (filterSectorB && p.setor !== filterSectorB) return false;
+    return true;
+  });
+
+  // Pop-up inteligente: Ativa quando são selecionados 2 jogadores de setores distintos
+  useEffect(() => {
+    if (compareA && compareB) {
+      const pA = players.find(p => p.id === compareA);
+      const pB = players.find(p => p.id === compareB);
+      if (pA && pB && pA.setor !== pB.setor) {
+        const compareKey = `${compareA}-${compareB}`;
+        if (dismissedWarningFor !== compareKey) {
+          setShowSectorWarning(true);
+        }
+      } else {
+        setShowSectorWarning(false);
+      }
+    }
+  }, [compareA, compareB, players, dismissedWarningFor]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -138,7 +180,6 @@ export default function App() {
 
   const handleSavePlayer = async (e) => {
     e.preventDefault();
-    // Limpar funcoes vazias antes de gravar
     const funcoesLimpas = novoJogador.funcoes.filter(f => f.trim() !== '');
     if(funcoesLimpas.length === 0) return alert("Selecione pelo menos uma função.");
 
@@ -154,9 +195,7 @@ export default function App() {
     } else {
       const acoesIniciais = {}; 
       const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
-      listaBase.forEach(a => acoesIniciais[a.id] = 0); 
-      payload.acoes = acoesIniciais;
-      
+      listaBase.forEach(a => acoesIniciais[a.id] = 0); payload.acoes = acoesIniciais;
       const { data, error } = await supabase.from('jogadores').insert([payload]).select();
       if (!error && data) { setPlayers([...players, data[0]]); cancelarEdicao(); }
     }
@@ -295,6 +334,28 @@ export default function App() {
       <Navbar session={session} activeTab={activeTab} setActiveTab={setActiveTab} />
       <datalist id="categorias-list">{uniqueCategories.map(c => <option key={c} value={c} />)}</datalist>
 
+      {/* MODAL POP-UP DE AVISO (Aparece sobre tudo quando há conflito de setor) */}
+      {showSectorWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border-2 border-red-500 rounded-xl p-8 max-w-md w-full shadow-2xl transform transition-all">
+            <div className="text-5xl text-center mb-4">⚠️</div>
+            <h3 className="text-2xl font-black text-center text-red-500 mb-2">Setores Diferentes!</h3>
+            <p className="text-center text-gray-300 mb-6">
+              Você está a comparar dois atletas que jogam em posições distintas. Ações específicas e estatísticas táticas poderão não refletir uma comparação justa (Ex: um Guarda-redes vs um Atacante).
+            </p>
+            <button 
+              onClick={() => {
+                setShowSectorWarning(false);
+                setDismissedWarningFor(`${compareA}-${compareB}`);
+              }} 
+              className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-red-900/50"
+            >
+              Compreendi, continuar
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
         {activeTab === 'clubes' && (
@@ -389,26 +450,70 @@ export default function App() {
         {activeTab === 'comparativo' && (
           <div className="bg-gray-900 p-6 rounded-xl border border-gray-800">
             <h2 className="text-2xl font-bold mb-6">Frente a Frente Global</h2>
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <select value={compareA} onChange={e => setCompareA(e.target.value)} className="p-3 bg-gray-950 rounded border border-gray-700 text-lg outline-none">
-                <option value="">Selecione o Atleta A...</option>{players.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.time_nome})</option>)}
-              </select>
-              <select value={compareB} onChange={e => setCompareB(e.target.value)} className="p-3 bg-gray-950 rounded border border-gray-700 text-lg outline-none">
-                <option value="">Selecione o Atleta B...</option>{players.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.time_nome})</option>)}
-              </select>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              
+              {/* === FILTROS ATLETA A === */}
+              <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
+                <h3 className="font-bold text-blue-400 text-lg border-b border-gray-800 pb-2">Seleção do Atleta A</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select value={filterTeamA} onChange={e => setFilterTeamA(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todos os Clubes</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select value={filterCategoryA} onChange={e => setFilterCategoryA(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todas as Categorias</option>{uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={filterSectorA} onChange={e => setFilterSectorA(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todos os Setores</option>{Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <select value={compareA} onChange={e => setCompareA(e.target.value)} className="w-full p-3 bg-blue-900/20 border border-blue-900/50 text-blue-300 font-bold text-lg rounded-lg outline-none focus:ring-1 focus:ring-blue-500">
+                  <option value="">Selecione o Atleta A...</option>
+                  {filteredPlayersA.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.setor || 'S/ Setor'})</option>)}
+                </select>
+              </div>
+
+              {/* === FILTROS ATLETA B === */}
+              <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
+                <h3 className="font-bold text-orange-400 text-lg border-b border-gray-800 pb-2">Seleção do Atleta B</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select value={filterTeamB} onChange={e => setFilterTeamB(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todos os Clubes</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select value={filterCategoryB} onChange={e => setFilterCategoryB(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todas as Categorias</option>{uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={filterSectorB} onChange={e => setFilterSectorB(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todos os Setores</option>{Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <select value={compareB} onChange={e => setCompareB(e.target.value)} className="w-full p-3 bg-orange-900/20 border border-orange-900/50 text-orange-300 font-bold text-lg rounded-lg outline-none focus:ring-1 focus:ring-orange-500">
+                  <option value="">Selecione o Atleta B...</option>
+                  {filteredPlayersB.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.setor || 'S/ Setor'})</option>)}
+                </select>
+              </div>
+
             </div>
+
             {compareA && compareB && (
-              <div className="space-y-6">
+              <div className="space-y-6 mt-8">
                 {TODAS_ACOES.map(acao => {
                   const pA = players.find(p => p.id === compareA); const pB = players.find(p => p.id === compareB);
                   const valA = pA.acoes[acao.id] || 0; const valB = pB.acoes[acao.id] || 0; const max = Math.max(valA, valB, 1);
-                  if (valA === 0 && valB === 0) return null; // Esconde ações que ambos têm a zero para não poluir
+                  
+                  // Oculta a linha se a métrica estiver a zeros para os dois jogadores (não polui a vista de Guarda-redes vs Defesa)
+                  if (valA === 0 && valB === 0) return null; 
+
                   return (
                     <div key={acao.id} className="relative">
-                      <div className="flex justify-between text-sm text-gray-400 mb-1 px-1"><span className="font-mono text-blue-400 font-bold">{valA}</span><span className="uppercase tracking-widest text-xs">{acao.nome}</span><span className="font-mono text-orange-400 font-bold">{valB}</span></div>
-                      <div className="flex h-3 bg-gray-950 rounded overflow-hidden">
-                        <div className="w-1/2 flex justify-end bg-gray-950 pr-1"><div className="h-full bg-blue-500 rounded-l" style={{ width: `${(valA / max) * 100}%` }}></div></div>
-                        <div className="w-1/2 flex justify-start bg-gray-950 pl-1"><div className="h-full bg-orange-500 rounded-r" style={{ width: `${(valB / max) * 100}%` }}></div></div>
+                      <div className="flex justify-between text-sm text-gray-400 mb-1 px-1">
+                        <span className="font-mono text-blue-400 font-bold text-lg">{valA}</span>
+                        <span className="uppercase tracking-widest text-xs font-bold text-gray-300">{acao.nome}</span>
+                        <span className="font-mono text-orange-400 font-bold text-lg">{valB}</span>
+                      </div>
+                      <div className="flex h-4 bg-gray-950 rounded-full overflow-hidden shadow-inner border border-gray-800">
+                        <div className="w-1/2 flex justify-end bg-gray-950 pr-1"><div className="h-full bg-blue-500 rounded-l-full transition-all duration-500" style={{ width: `${(valA / max) * 100}%` }}></div></div>
+                        <div className="w-1/2 flex justify-start bg-gray-950 pl-1"><div className="h-full bg-orange-500 rounded-r-full transition-all duration-500" style={{ width: `${(valB / max) * 100}%` }}></div></div>
                       </div>
                     </div>
                   );
