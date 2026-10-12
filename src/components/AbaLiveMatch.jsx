@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 export default function AbaLiveMatch({
   isMatchActive, matchTitle, setMatchTitle, 
-  matchCompetition, setMatchCompetition, uniqueCompetitions, // RECEBE NOVAS VARIÁVEIS
+  matchCompetition, setMatchCompetition, competitions, // AGORA É A LISTA DA BASE DE DADOS
   matchTeam, setMatchTeam, 
   matchCategory, setMatchCategory,
   matchSquad, setMatchSquad,
@@ -79,20 +79,17 @@ export default function AbaLiveMatch({
           <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
           <p className="text-gray-400 mb-6">Defina a competição, título do jogo e a lista de convocados.</p>
           
-          {/* NOVO: CAMPO DE COMPETIÇÃO E TÍTULO LADO A LADO */}
           <div className="flex flex-col md:flex-row gap-4 mb-4">
-            <input 
-              type="text" 
-              list="competicoes-list"
-              placeholder="Competição (Ex: Liga Nacional)" 
+            {/* NOVO: SELECT DIRETO DA BASE DE DADOS */}
+            <select 
               required 
               value={matchCompetition} 
               onChange={e => setMatchCompetition(e.target.value)} 
-              className="flex-1 p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500" 
-            />
-            <datalist id="competicoes-list">
-              {uniqueCompetitions.map(c => <option key={c} value={c} />)}
-            </datalist>
+              className="flex-1 p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500"
+            >
+              <option value="">Selecione a Competição...</option>
+              {competitions.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
 
             <input 
               type="text" 
@@ -230,7 +227,6 @@ export default function AbaLiveMatch({
 
           <div className="xl:col-span-3 space-y-8 content-start">
             
-            {/* GRUPO: EM CAMPO */}
             <div>
               <h3 className="text-xl font-black text-blue-400 mb-4 border-b border-gray-800 pb-2 flex justify-between">
                 <span>⚽ Em Campo</span>
@@ -259,7 +255,6 @@ export default function AbaLiveMatch({
                         </div>
                       </div>
 
-                      {/* Modal Interno de Substituição */}
                       {subPlayerOut === sq.id && (
                         <div className="p-3 bg-gray-950 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
                           <p className="text-xs text-orange-400 font-bold mb-2 uppercase tracking-wider">Quem entra no lugar de {player.nome}?</p>
@@ -277,7 +272,6 @@ export default function AbaLiveMatch({
                         </div>
                       )}
 
-                      {/* Área de Ações Táticas */}
                       {isExpanded && subPlayerOut !== sq.id && (
                         <div className="p-3 border-t border-gray-800/50 bg-gray-900/50">
                           {isActionDisabled && currentPeriod <= 4 && <p className="text-[10px] text-red-500 text-center font-bold mb-2 bg-red-950/30 p-1 rounded">⏱️ Inicie o cronómetro para ativar ações.</p>}
@@ -315,7 +309,6 @@ export default function AbaLiveMatch({
               </div>
             </div>
 
-            {/* GRUPO: NO BANCO */}
             {noBanco.length > 0 && (
               <div>
                 <h3 className="text-xl font-black text-orange-400 mb-4 border-b border-gray-800 pb-2 flex justify-between mt-8">
@@ -345,7 +338,6 @@ export default function AbaLiveMatch({
                           </div>
                         </div>
 
-                        {/* Ações Bloqueadas */}
                         {isExpanded && (
                           <div className="p-3 border-t border-gray-800/50 bg-gray-900/30">
                             <p className="text-[10px] text-orange-500 font-bold mb-3 text-center bg-orange-950/20 p-1 rounded">🚫 Ações bloqueadas enquanto estiver no banco.</p>

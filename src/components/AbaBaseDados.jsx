@@ -4,7 +4,8 @@ export default function AbaBaseDados({
   novoJogador, setNovoJogador, teams, handleSavePlayer, editingPlayerId,
   cancelarEdicao, FilterComponent, displayedPlayers, toggleExpandPlayer,
   handleEditClick, handleDeletePlayer, getIdade, expandedPlayers,
-  SETORES, ACOES_LINHA, ACOES_GOLEIRO, handleSetGlobalAction, handleUpdateGlobalActions
+  SETORES, ACOES_LINHA, ACOES_GOLEIRO, handleSetGlobalAction, handleUpdateGlobalActions,
+  competitions, newCompetitionName, setNewCompetitionName, handleAddCompetition // NOVO: Props da Competição
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -21,13 +22,11 @@ export default function AbaBaseDados({
             <input type="text" list="categorias-list" placeholder="Categoria (Ex: Sub-17)" required value={novoJogador.categoria} onChange={e => setNovoJogador({...novoJogador, categoria: e.target.value})} className="p-2 bg-gray-950 rounded border border-gray-700" />
           </div>
 
-          {/* NOVO: SELECT DE SETOR */}
           <select required value={novoJogador.setor} onChange={e => setNovoJogador({...novoJogador, setor: e.target.value, funcoes: ['']})} className="w-full p-2 bg-gray-950 rounded border border-gray-700 text-blue-400 font-bold">
             <option value="">Selecione o Setor do Campo...</option>
             {Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
 
-          {/* NOVO: LISTA DINÂMICA DE FUNÇÕES (Até 3) */}
           {novoJogador.setor && (
             <div className="space-y-2 bg-gray-950 p-3 rounded border border-gray-800">
               <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Funções Específicas (Máx 3):</label>
@@ -74,7 +73,16 @@ export default function AbaBaseDados({
       </form>
       
       <div className="lg:col-span-2">
+        
+        {/* NOVO: BLOCO DE GESTÃO RÁPIDA DE COMPETIÇÕES */}
+        <form onSubmit={handleAddCompetition} className="bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6 flex flex-col sm:flex-row gap-3 items-center">
+          <div className="font-bold text-blue-400 whitespace-nowrap">🏆 Adicionar Competição:</div>
+          <input type="text" placeholder="Nome da Competição (Ex: Copa do Brasil)" required value={newCompetitionName} onChange={e => setNewCompetitionName(e.target.value)} className="flex-1 w-full p-2 bg-gray-950 rounded border border-gray-700 outline-none focus:border-blue-500 text-sm" />
+          <button type="submit" className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded font-bold transition text-sm">Adicionar</button>
+        </form>
+
         {FilterComponent}
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {displayedPlayers.length === 0 ? (
             <div className="col-span-2 text-center text-gray-500 py-10 bg-gray-900 rounded-xl">Nenhum jogador encontrado.</div>
