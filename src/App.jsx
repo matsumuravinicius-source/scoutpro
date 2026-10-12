@@ -240,11 +240,9 @@ export default function App() {
        const reservasCount = matchSquad.filter(p => !p.titular && p.id !== playerId).length;
        if (value === false && reservasCount >= 12) { alert("Já existem 12 reservas."); return; }
     }
-    // Usa atualização funcional (prev) para evitar atropelamentos de estado
     setMatchSquad(prev => prev.map(p => p.id === playerId ? { ...p, [field]: value, ...(field === 'titular' ? {inPitch: value} : {}) } : p));
   };
 
-  // NOVO: Função atómica para executar substituições de forma segura
   const handlePerformSubstitution = (playerOutId, playerInId) => {
     if(!playerInId) return;
     setMatchSquad(prev => prev.map(p => {
@@ -265,7 +263,14 @@ export default function App() {
     setOpponentGoals(0); setOpponentShots(0); setOpponentFinalThird(0);
   };
 
-  const handleFinalizarTempo = () => { if (currentPeriod > 4) return alert("Limite 4 tempos."); setPeriodLogs(prev => [...prev, `${currentPeriod}º Tempo: ${formatTime(matchTime)}`]); setIsTimerRunning(false); setMatchTime(0); if (currentPeriod < 4) setCurrentPeriod(prev => prev + 1); };
+  // ATUALIZADO: Ao finalizar, permite ir para o "5º" estado (Partida 100% encerrada)
+  const handleFinalizarTempo = () => { 
+    if (currentPeriod > 4) return; 
+    setPeriodLogs(prev => [...prev, `${currentPeriod}º Tempo: ${formatTime(matchTime)}`]); 
+    setIsTimerRunning(false); 
+    setMatchTime(0); 
+    setCurrentPeriod(prev => prev + 1); 
+  };
   
   const handleOpponentAction = (type, increment) => {
     if (increment > 0) {
@@ -424,7 +429,7 @@ export default function App() {
             matchCategory={matchCategory} setMatchCategory={setMatchCategory}
             matchSquad={matchSquad} setMatchSquad={setMatchSquad} 
             handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} 
-            handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} // NOVO PROPS AQUI
+            handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} 
             teams={teams} players={players} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} 
             isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} 
             opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} 

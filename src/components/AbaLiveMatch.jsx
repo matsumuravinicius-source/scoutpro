@@ -15,7 +15,8 @@ export default function AbaLiveMatch({
   const [expandedLivePlayers, setExpandedLivePlayers] = useState([]);
   const [subPlayerOut, setSubPlayerOut] = useState(null); 
 
-  const isActionDisabled = matchTime === 0;
+  // NOVO: A partida é bloqueada se o tempo for 0 OU se já tivermos passado do 4º tempo
+  const isActionDisabled = matchTime === 0 || currentPeriod > 4;
 
   const teamCategories = matchTeam 
     ? [...new Set(players.filter(p => p.time_nome === matchTeam).map(p => p.categoria).filter(Boolean))]
@@ -31,9 +32,7 @@ export default function AbaLiveMatch({
     const pOut = players.find(p => p.id === playerOutId);
     const pIn = players.find(p => p.id === playerInId);
     
-    // Chama a nova função atómica que resolve a substituição na hora
     handlePerformSubstitution(playerOutId, playerInId);
-    
     setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] 🔄 Substituição: SAIU ${pOut.nome} | ENTROU ${pIn.nome}`, ...prev]);
     setSubPlayerOut(null); 
   };
@@ -129,17 +128,33 @@ export default function AbaLiveMatch({
           <div className="xl:col-span-1 space-y-4">
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl sticky top-20 z-10 flex flex-col items-center">
               <h2 className="text-sm font-bold text-red-500 flex items-center gap-2 mb-2 uppercase tracking-widest text-center"><span className="animate-pulse">🔴</span> {matchTitle}</h2>
-              <div className="text-gray-400 font-bold mb-1">{currentPeriod}º Tempo</div>
+              <div className="text-gray-400 font-bold mb-1">{currentPeriod > 4 ? 'Fim de Jogo' : `${currentPeriod}º Tempo`}</div>
               <div className="text-6xl font-mono font-black text-white mb-6 tabular-nums">{formatTime(matchTime)}</div>
               
               <div className="flex gap-2 w-full mb-4">
                 {!isTimerRunning ? (
-                  <button onClick={() => setIsTimerRunning(true)} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded-lg font-bold text-lg transition shadow-lg">▶ Iniciar</button>
+                  <button 
+                    disabled={currentPeriod > 4} 
+                    onClick={() => setIsTimerRunning(true)} 
+                    className={`flex-1 py-3 rounded-lg font-bold text-lg transition shadow-lg ${currentPeriod > 4 ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50' : 'bg-green-600 hover:bg-green-500 text-white'}`}
+                  >
+                    ▶ Iniciar
+                  </button>
                 ) : (
-                  <button onClick={() => setIsTimerRunning(false)} className="flex-1 bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold text-lg transition shadow-lg">⏸ Pausar</button>
+                  <button onClick={() => setIsTimerRunning(false)} className="flex-1 bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold text-lg transition shadow-lg text-white">
+                    ⏸ Pausar
+                  </button>
                 )}
               </div>
-              <button onClick={handleFinalizarTempo} disabled={currentPeriod > 4} className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 py-2 rounded-lg font-bold mb-6 transition disabled:opacity-50">⏹ Finalizar {currentPeriod}º Tempo</button>
+
+              {/* Botão de Finalizar (Completamente bloqueado se passar do 4º tempo) */}
+              <button 
+                onClick={handleFinalizarTempo} 
+                disabled={currentPeriod > 4} 
+                className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 py-2 rounded-lg font-bold mb-6 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {currentPeriod > 4 ? '⏹ Partida Encerrada' : `⏹ Finalizar ${currentPeriod}º Tempo`}
+              </button>
 
               <div className="w-full bg-gray-950 rounded-lg p-4 border border-red-900/50 mb-6 space-y-2">
                 <h4 className="text-red-400 font-bold text-sm mb-3 flex items-center gap-2">🛡️ Ações do Adversário</h4>
@@ -178,7 +193,7 @@ export default function AbaLiveMatch({
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl h-96 flex flex-col">
               <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2">⏱️ Linha do Tempo</h3>
               <div className="flex-1 bg-gray-950 rounded-lg border border-gray-800 p-3 overflow-y-auto space-y-2">
-                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Os Golos, Cartões, Passes e Substituições aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
+                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Eventos e Ações aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
               </div>
             </div>
           </div>
@@ -235,9 +250,14 @@ export default function AbaLiveMatch({
                       {/* Área de Ações Táticas */}
                       {isExpanded && subPlayerOut !== sq.id && (
                         <div className="p-3 border-t border-gray-800/50 bg-gray-900/50">
-                          {isActionDisabled && <p className="text-[10px] text-red-500 text-center font-bold mb-2 bg-red-950/30 p-1 rounded">⏱️ Inicie o cronómetro para ativar ações.</p>}
+                          {isActionDisabled && currentPeriod <= 4 && <p className="text-[10px] text-red-500 text-center font-bold mb-2 bg-red-950/30 p-1 rounded">⏱️ Inicie o cronómetro para ativar ações.</p>}
+                          {isActionDisabled && currentPeriod > 4 && <p className="text-[10px] text-gray-400 text-center font-bold mb-2 bg-gray-900 p-1 rounded">🛑 Partida Finalizada.</p>}
                           
-                          <button onClick={(e) => { e.stopPropagation(); setSubPlayerOut(sq.id); }} className="w-full mb-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm font-bold text-gray-300 flex items-center justify-center gap-2 transition">
+                          <button 
+                            disabled={currentPeriod > 4} // Só não pode substituir se a partida acabar de vez
+                            onClick={(e) => { e.stopPropagation(); setSubPlayerOut(sq.id); }} 
+                            className={`w-full mb-3 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition ${currentPeriod > 4 ? 'bg-gray-900 text-gray-600 cursor-not-allowed' : 'bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300'}`}
+                          >
                             🔄 Substituir Atleta
                           </button>
                           
@@ -265,7 +285,7 @@ export default function AbaLiveMatch({
               </div>
             </div>
 
-            {/* GRUPO: NO BANCO (BLOQUEADO E DESATIVADO PARA ESTATÍSTICAS) */}
+            {/* GRUPO: NO BANCO */}
             {noBanco.length > 0 && (
               <div>
                 <h3 className="text-xl font-black text-orange-400 mb-4 border-b border-gray-800 pb-2 flex justify-between mt-8">
@@ -295,7 +315,7 @@ export default function AbaLiveMatch({
                           </div>
                         </div>
 
-                        {/* Ações (Desativadas e bloqueadas para quem está no banco) */}
+                        {/* Ações Bloqueadas */}
                         {isExpanded && (
                           <div className="p-3 border-t border-gray-800/50 bg-gray-900/30">
                             <p className="text-[10px] text-orange-500 font-bold mb-3 text-center bg-orange-950/20 p-1 rounded">🚫 Ações bloqueadas enquanto estiver no banco.</p>
