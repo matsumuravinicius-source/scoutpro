@@ -55,9 +55,10 @@ export default function App() {
   const [expandedPlayers, setExpandedPlayers] = useState([]); 
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
+  // === ESTADOS DO MODO JOGO & HISTÓRICO ===
   const [matchCompetition, setMatchCompetition] = useState(''); 
   const [filterMatchCompetition, setFilterMatchCompetition] = useState(''); 
-  const [filterMatchYear, setFilterMatchYear] = useState(''); // NOVO: Filtro de Ano para Histórico
+  const [filterMatchYear, setFilterMatchYear] = useState(''); 
   
   const [matchTeam, setMatchTeam] = useState('');
   const [matchCategory, setMatchCategory] = useState(''); 
@@ -78,6 +79,11 @@ export default function App() {
 
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [editMatchData, setEditMatchData] = useState(null);
+
+  // === NOVO: ESTADOS DE ANO PARA ANÁLISES GLOBAIS ===
+  const [filterGlobalYear, setFilterGlobalYear] = useState('');
+  const [filterYearA, setFilterYearA] = useState('');
+  const [filterYearB, setFilterYearB] = useState('');
 
   const [compareA, setCompareA] = useState('');
   const [filterTeamA, setFilterTeamA] = useState('');
@@ -104,9 +110,7 @@ export default function App() {
   if (!uniqueCategories.includes('Principal')) uniqueCategories.push('Principal');
   if (!uniqueCategories.includes('Sub-20')) uniqueCategories.push('Sub-20');
 
-  // Listas de Competições e Anos com base nas partidas já jogadas
   const uniqueCompetitionsHistory = [...new Set(matchHistory.map(m => m.dados?._meta?.competicao).filter(Boolean))].sort();
-  // NOVO: Extrai todos os anos únicos dos jogos registados (ex: 2026, 2027...)
   const uniqueMatchYears = [...new Set(matchHistory.map(m => new Date(m.criado_em).getFullYear().toString()))].sort((a, b) => b - a);
 
   const displayedPlayers = players.filter(p => {
@@ -115,10 +119,12 @@ export default function App() {
     return true;
   });
 
+  // NOVO: Filtragem dos Atletas A e B por Ano
   const filteredPlayersA = players.filter(p => {
     if (filterTeamA && p.time_nome !== filterTeamA) return false;
     if (filterCategoryA && p.categoria !== filterCategoryA) return false;
     if (filterSectorA && p.setor !== filterSectorA) return false;
+    if (filterYearA && !matchHistory.some(m => new Date(m.criado_em).getFullYear().toString() === filterYearA && m.dados && m.dados[p.id])) return false;
     return true;
   });
 
@@ -126,8 +132,37 @@ export default function App() {
     if (filterTeamB && p.time_nome !== filterTeamB) return false;
     if (filterCategoryB && p.categoria !== filterCategoryB) return false;
     if (filterSectorB && p.setor !== filterSectorB) return false;
+    if (filterYearB && !matchHistory.some(m => new Date(m.criado_em).getFullYear().toString() === filterYearB && m.dados && m.dados[p.id])) return false;
     return true;
   });
+
+  // NOVO: LÓGICA CORE DE AGREGAÇÃO POR ANO
+  // Calcula estatísticas do zero baseadas num ano específico, ou retorna o Global se o ano estiver vazio
+  const getComputedStats = (player, year) => {
+    if (!year) return player.acoes; // Retorna os totais globais da base de dados se não houver filtro
+    
+    const playerMatches = matchHistory.filter(m => {
+      const matchYear = new Date(m.criado_em).getFullYear().toString();
+      return matchYear === year && m.dados && m.dados[player.id];
+    });
+    
+    const computed = {};
+    TODAS_ACOES.forEach(a => computed[a.id] = 0);
+    
+    playerMatches.forEach(m => {
+      const st = m.dados[player.id];
+      Object.keys(st).forEach(k => {
+        computed[k] = (computed[k] || 0) + (parseInt(st[k]) || 0);
+      });
+    });
+    return computed;
+  };
+
+  // Injetamos as estatísticas recálculadas em todos os jogadores na vista
+  const playersWithCalculatedStats = displayedPlayers.map(p => ({
+    ...p,
+    acoes_calc: getComputedStats(p, filterGlobalYear)
+  }));
 
   useEffect(() => {
     if (compareA && compareB) {
@@ -328,7 +363,6 @@ export default function App() {
 
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; if (incrementValue < 0 && currentMatchVal === 0) return;
-    
     if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas', 'defesas_dificeis'].includes(actionId)) {
       const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
       setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] ${players.find(p => p.id === playerId).nome} • ${acaoNome}`, ...prev]);
@@ -406,14 +440,23 @@ export default function App() {
 
   const handleSaveCustomMetric = (e) => { e.preventDefault(); if (!novaMetrica.nome || !novaMetrica.numerador || !novaMetrica.denominador) return; const id = Date.now().toString(); const metricList = [...savedMetrics, { id, ...novaMetrica }]; setSavedMetrics(metricList); localStorage.setItem('scoutpro_custom_metrics', JSON.stringify(metricList)); setSelectedMetricId(id); setNovaMetrica({ nome: '', numerador: '', denominador: '' }); };
   const handleDeleteCustomMetric = (id) => { if(!window.confirm("Remover métrica?")) return; const metricList = savedMetrics.filter(m => m.id !== id); setSavedMetrics(metricList); localStorage.setItem('scoutpro_custom_metrics', JSON.stringify(metricList)); if (selectedMetricId === id) setSelectedMetricId(metricList[0]?.id || null); };
-  const calculateCustomMetric = (player, metricObj) => { if (!metricObj) return 0; const num = parseFloat(player.acoes[metricObj.numerador]) || 0; const den = parseFloat(player.acoes[metricObj.denominador]) || 0; return den === 0 ? 0 : (num / den).toFixed(3); };
-  const getAnalyzedPlayers = () => { const selectedMetricObj = savedMetrics.find(m => m.id === selectedMetricId); if(!selectedMetricObj) return []; return [...displayedPlayers].sort((a, b) => calculateCustomMetric(b, selectedMetricObj) - calculateCustomMetric(a, selectedMetricObj)); };
-  const getRankedPlayers = () => [...displayedPlayers].sort((a, b) => (b.acoes[rankMetric]||0) - (a.acoes[rankMetric]||0));
+  
+  // ATUALIZADO: Usamos "acoes_calc" em vez de "acoes" para as contas baterem com o Ano selecionado
+  const calculateCustomMetric = (player, metricObj) => { if (!metricObj) return 0; const num = parseFloat(player.acoes_calc[metricObj.numerador]) || 0; const den = parseFloat(player.acoes_calc[metricObj.denominador]) || 0; return den === 0 ? 0 : (num / den).toFixed(3); };
+  const getAnalyzedPlayers = () => { const selectedMetricObj = savedMetrics.find(m => m.id === selectedMetricId); if(!selectedMetricObj) return []; return [...playersWithCalculatedStats].sort((a, b) => calculateCustomMetric(b, selectedMetricObj) - calculateCustomMetric(a, selectedMetricObj)); };
+  const getRankedPlayers = () => [...playersWithCalculatedStats].sort((a, b) => (b.acoes_calc[rankMetric]||0) - (a.acoes_calc[rankMetric]||0));
   const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
-  const GlobalFilters = () => (
+  // O showYear define se o dropdown de ano aparece
+  const GlobalFilters = ({ showYear = false }) => (
     <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-900 p-4 rounded-xl border border-gray-800">
       <div className="flex items-center gap-2 text-gray-400 font-bold mr-2">🔎 Filtros:</div>
+      {showYear && (
+        <select value={filterGlobalYear} onChange={e => setFilterGlobalYear(e.target.value)} className="p-2 bg-gray-950 rounded border border-gray-700 outline-none text-sm flex-1">
+          <option value="">Todos os Anos</option>
+          {uniqueMatchYears.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+      )}
       <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="p-2 bg-gray-950 rounded border border-gray-700 outline-none text-sm flex-1"><option value="">Todos os Clubes</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}</select>
       <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="p-2 bg-gray-950 rounded border border-gray-700 outline-none text-sm flex-1"><option value="">Todas as Categorias</option>{uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}</select>
     </div>
@@ -439,20 +482,14 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
-        {/* PASSAGEM DOS ANOS PARA A ABA CLUBES */}
         {activeTab === 'clubes' && (
-          <AbaClubes 
-            teams={teams} players={players} matchHistory={matchHistory} 
-            newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} 
-            uniqueCompetitions={uniqueCompetitionsHistory} 
-            uniqueMatchYears={uniqueMatchYears} 
-          />
+          <AbaClubes teams={teams} players={players} matchHistory={matchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} uniqueCompetitions={uniqueCompetitionsHistory} uniqueMatchYears={uniqueMatchYears} />
         )}
 
         {activeTab === 'scout' && (
           <AbaBaseDados 
             novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} 
-            editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={<GlobalFilters />} 
+            editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={<GlobalFilters showYear={false} />} 
             displayedPlayers={displayedPlayers} toggleExpandPlayer={toggleExpandPlayer} handleEditClick={handleEditClick} 
             handleDeletePlayer={handleDeletePlayer} getIdade={getIdade} expandedPlayers={expandedPlayers} 
             SETORES={SETORES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} 
@@ -478,21 +515,14 @@ export default function App() {
           />
         )}
 
-        {/* PASSAGEM DOS ANOS PARA A ABA HISTÓRICO */}
         {activeTab === 'historico' && (
-          <AbaHistorico 
-            matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} 
-            saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} 
-            expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} 
-            ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} 
-            filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitionsHistory} 
-            filterMatchYear={filterMatchYear} setFilterMatchYear={setFilterMatchYear} uniqueMatchYears={uniqueMatchYears}
-          />
+          <AbaHistorico matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitionsHistory} filterMatchYear={filterMatchYear} setFilterMatchYear={setFilterMatchYear} uniqueMatchYears={uniqueMatchYears} />
         )}
 
+        {/* REPARE: showYear={true} para ativar as datas nos painéis analíticos! */}
         {activeTab === 'analise' && (
           <div className="space-y-6">
-            <GlobalFilters />
+            <GlobalFilters showYear={true} />
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
               <h2 className="text-2xl font-bold mb-2">Criar Cruzamento de Dados</h2>
               <form onSubmit={handleSaveCustomMetric} className="flex flex-col md:flex-row gap-4 items-center">
@@ -527,7 +557,8 @@ export default function App() {
                         <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
                           <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
                           <td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.funcoes?.join(' • ') || player.posicao} | {player.time_nome}</span></td>
-                          <td className="p-3 text-right text-xs font-mono text-gray-500">{(player.acoes[metricObj.numerador] || 0)} / {(player.acoes[metricObj.denominador] || 0)}</td>
+                          {/* ATUALIZADO PARA USAR acoes_calc */}
+                          <td className="p-3 text-right text-xs font-mono text-gray-500">{(player.acoes_calc[metricObj.numerador] || 0)} / {(player.acoes_calc[metricObj.denominador] || 0)}</td>
                           <td className="p-3 text-right font-mono text-xl text-green-400 font-bold">{calculateCustomMetric(player, metricObj)}</td>
                         </tr>
                       );
@@ -541,7 +572,7 @@ export default function App() {
 
         {activeTab === 'leaderboard' && (
           <div className="space-y-6">
-            <GlobalFilters />
+            <GlobalFilters showYear={true} />
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Ranking de Atletas</h2>
@@ -554,7 +585,12 @@ export default function App() {
                   <thead><tr className="border-b border-gray-800 text-gray-400"><th className="p-3">#</th><th className="p-3">Atleta</th><th className="p-3 text-right">Métrica</th></tr></thead>
                   <tbody>
                     {getRankedPlayers().map((player, idx) => (
-                      <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20"><td className="p-3 font-mono text-gray-500">{idx + 1}</td><td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.funcoes?.join(' • ') || player.posicao} | {player.time_nome}</span></td><td className="p-3 text-right font-mono text-xl text-green-400">{player.acoes[rankMetric] || 0}</td></tr>
+                      <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
+                        <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
+                        <td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.funcoes?.join(' • ') || player.posicao} | {player.time_nome}</span></td>
+                        {/* ATUALIZADO PARA USAR acoes_calc */}
+                        <td className="p-3 text-right font-mono text-xl text-green-400">{player.acoes_calc[rankMetric] || 0}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -568,9 +604,13 @@ export default function App() {
             <h2 className="text-2xl font-bold mb-6">Frente a Frente Global</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              
               <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
                 <h3 className="font-bold text-blue-400 text-lg border-b border-gray-800 pb-2">Seleção do Atleta A</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  <select value={filterYearA} onChange={e => setFilterYearA(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todos os Anos</option>{uniqueMatchYears.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
                   <select value={filterTeamA} onChange={e => setFilterTeamA(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
                     <option value="">Todos os Clubes</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -589,7 +629,10 @@ export default function App() {
 
               <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
                 <h3 className="font-bold text-orange-400 text-lg border-b border-gray-800 pb-2">Seleção do Atleta B</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  <select value={filterYearB} onChange={e => setFilterYearB(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
+                    <option value="">Todos os Anos</option>{uniqueMatchYears.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
                   <select value={filterTeamB} onChange={e => setFilterTeamB(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none">
                     <option value="">Todos os Clubes</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -605,13 +648,21 @@ export default function App() {
                   {filteredPlayersB.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.setor || 'S/ Setor'})</option>)}
                 </select>
               </div>
+
             </div>
 
             {compareA && compareB && (
               <div className="space-y-6 mt-8">
                 {TODAS_ACOES.map(acao => {
                   const pA = players.find(p => p.id === compareA); const pB = players.find(p => p.id === compareB);
-                  const valA = pA.acoes[acao.id] || 0; const valB = pB.acoes[acao.id] || 0; const max = Math.max(valA, valB, 1);
+                  
+                  // ATUALIZADO: Vai buscar estatísticas específicas daquele ano para a barra de progresso!
+                  const statsA = pA ? getComputedStats(pA, filterYearA) : {};
+                  const statsB = pB ? getComputedStats(pB, filterYearB) : {};
+                  
+                  const valA = statsA[acao.id] || 0; 
+                  const valB = statsB[acao.id] || 0; 
+                  const max = Math.max(valA, valB, 1);
                   if (valA === 0 && valB === 0) return null; 
 
                   return (
