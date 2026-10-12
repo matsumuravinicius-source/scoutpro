@@ -57,6 +57,7 @@ export default function App() {
 
   const [matchCompetition, setMatchCompetition] = useState(''); 
   const [filterMatchCompetition, setFilterMatchCompetition] = useState(''); 
+  const [filterMatchYear, setFilterMatchYear] = useState(''); // NOVO: Filtro de Ano para Histórico
   
   const [matchTeam, setMatchTeam] = useState('');
   const [matchCategory, setMatchCategory] = useState(''); 
@@ -103,7 +104,10 @@ export default function App() {
   if (!uniqueCategories.includes('Principal')) uniqueCategories.push('Principal');
   if (!uniqueCategories.includes('Sub-20')) uniqueCategories.push('Sub-20');
 
+  // Listas de Competições e Anos com base nas partidas já jogadas
   const uniqueCompetitionsHistory = [...new Set(matchHistory.map(m => m.dados?._meta?.competicao).filter(Boolean))].sort();
+  // NOVO: Extrai todos os anos únicos dos jogos registados (ex: 2026, 2027...)
+  const uniqueMatchYears = [...new Set(matchHistory.map(m => new Date(m.criado_em).getFullYear().toString()))].sort((a, b) => b - a);
 
   const displayedPlayers = players.filter(p => {
     if (filterTeam && p.time_nome !== filterTeam) return false;
@@ -435,9 +439,14 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
-        {/* NOVO: Passagem de uniqueCompetitionsHistory para a AbaClubes */}
+        {/* PASSAGEM DOS ANOS PARA A ABA CLUBES */}
         {activeTab === 'clubes' && (
-          <AbaClubes teams={teams} players={players} matchHistory={matchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} uniqueCompetitions={uniqueCompetitionsHistory} />
+          <AbaClubes 
+            teams={teams} players={players} matchHistory={matchHistory} 
+            newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} 
+            uniqueCompetitions={uniqueCompetitionsHistory} 
+            uniqueMatchYears={uniqueMatchYears} 
+          />
         )}
 
         {activeTab === 'scout' && (
@@ -469,8 +478,16 @@ export default function App() {
           />
         )}
 
+        {/* PASSAGEM DOS ANOS PARA A ABA HISTÓRICO */}
         {activeTab === 'historico' && (
-          <AbaHistorico matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitionsHistory} />
+          <AbaHistorico 
+            matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} 
+            saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} 
+            expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} 
+            ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} 
+            filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitionsHistory} 
+            filterMatchYear={filterMatchYear} setFilterMatchYear={setFilterMatchYear} uniqueMatchYears={uniqueMatchYears}
+          />
         )}
 
         {activeTab === 'analise' && (

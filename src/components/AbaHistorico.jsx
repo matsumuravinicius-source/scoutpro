@@ -4,31 +4,44 @@ export default function AbaHistorico({
   matchHistory, editingMatchId, editMatchData, setEditMatchData, saveMatchEdit, cancelMatchEdit,
   handleEditMatchClick, handleDeleteMatch, expandedMatch, setExpandedMatch, players, TODAS_ACOES, ACOES_GOLEIRO, ACOES_LINHA,
   handleSetMatchEditAction, handleUpdateMatchEditAction,
-  filterMatchCompetition, setFilterMatchCompetition, uniqueCompetitions // RECEBE OS NOVOS FILTROS
+  filterMatchCompetition, setFilterMatchCompetition, uniqueCompetitions,
+  filterMatchYear, setFilterMatchYear, uniqueMatchYears // RECEBE FILTROS DE ANO
 }) {
   
-  // Aplica o filtro na listagem se alguma competição for selecionada
-  const filteredHistory = filterMatchCompetition
-    ? matchHistory.filter(m => m.dados?._meta?.competicao === filterMatchCompetition)
-    : matchHistory;
+  // O filtro agora esconde as partidas que não batem com a Competição ou Ano selecionado
+  const filteredHistory = matchHistory.filter(m => {
+    if (filterMatchCompetition && m.dados?._meta?.competicao !== filterMatchCompetition) return false;
+    if (filterMatchYear && new Date(m.criado_em).getFullYear().toString() !== filterMatchYear) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
       
-      {/* CABEÇALHO COM FILTRO DE COMPETIÇÃO */}
+      {/* CABEÇALHO COM FILTROS DE ANO E COMPETIÇÃO */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-2xl font-bold">Relatórios de Partidas Salvas</h2>
-        <select 
-          value={filterMatchCompetition} 
-          onChange={e => setFilterMatchCompetition(e.target.value)} 
-          className="p-2 bg-gray-900 border border-gray-700 rounded-lg outline-none text-blue-400 font-bold w-full sm:w-auto"
-        >
-          <option value="">Todas as Competições</option>
-          {uniqueCompetitions.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <select 
+            value={filterMatchYear} 
+            onChange={e => setFilterMatchYear(e.target.value)} 
+            className="p-2 bg-gray-900 border border-gray-700 rounded-lg outline-none text-blue-400 font-bold w-full sm:w-auto"
+          >
+            <option value="">Todos os Anos</option>
+            {uniqueMatchYears?.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select 
+            value={filterMatchCompetition} 
+            onChange={e => setFilterMatchCompetition(e.target.value)} 
+            className="p-2 bg-gray-900 border border-gray-700 rounded-lg outline-none text-blue-400 font-bold w-full sm:w-auto"
+          >
+            <option value="">Todas as Competições</option>
+            {uniqueCompetitions?.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
       </div>
 
-      {filteredHistory.length === 0 ? <div className="text-center py-20 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">Nenhum relatório de partida encontrado.</div> : (
+      {filteredHistory.length === 0 ? <div className="text-center py-20 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">Nenhum relatório de partida encontrado com os filtros selecionados.</div> : (
         filteredHistory.map(partida => (
           <div key={partida.id} className={`bg-gray-900 rounded-xl border transition ${editingMatchId === partida.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
             <div className="p-4 bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800/50 gap-4">

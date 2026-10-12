@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 
-export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, uniqueCompetitions }) {
-  // NOVO: Estado de filtro de competição exclusivo para esta aba
+export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, uniqueCompetitions, uniqueMatchYears }) {
   const [filterCompetition, setFilterCompetition] = useState('');
+  const [filterYear, setFilterYear] = useState('');
 
   return (
     <div className="space-y-6">
@@ -17,16 +17,27 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
 
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
         
-        {/* NOVO: Menu de Filtro da Tabela de Clubes */}
-        <div className="flex justify-end mb-4">
+        {/* FILTROS DA TABELA DE CLUBES */}
+        <div className="flex flex-col sm:flex-row justify-end mb-4 gap-3">
            <div className="flex items-center gap-2">
-             <span className="text-gray-400 font-bold text-sm">🏆 Filtrar por Competição:</span>
+             <span className="text-gray-400 font-bold text-sm">📅 Ano:</span>
+             <select 
+               value={filterYear} 
+               onChange={e => setFilterYear(e.target.value)} 
+               className="p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none text-blue-400 font-bold"
+             >
+               <option value="">Todos os Anos</option>
+               {uniqueMatchYears?.map(y => <option key={y} value={y}>{y}</option>)}
+             </select>
+           </div>
+           <div className="flex items-center gap-2">
+             <span className="text-gray-400 font-bold text-sm">🏆 Competição:</span>
              <select 
                value={filterCompetition} 
                onChange={e => setFilterCompetition(e.target.value)} 
                className="p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none text-blue-400 font-bold"
              >
-               <option value="">Todas as Competições (Global)</option>
+               <option value="">Todas as Competições</option>
                {uniqueCompetitions?.map(c => <option key={c} value={c}>{c}</option>)}
              </select>
            </div>
@@ -54,9 +65,10 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
               ) : (
                 teams.map(team => {
                   
-                  // Filtra os jogos apenas para a competição e clube selecionados
+                  // O filtro agora verifica se bate com a Competição E com o Ano
                   const teamMatches = matchHistory.filter(m => {
                     if (filterCompetition && m.dados?._meta?.competicao !== filterCompetition) return false;
+                    if (filterYear && new Date(m.criado_em).getFullYear().toString() !== filterYear) return false;
                     return m.dados?._meta?.equipes?.includes(team);
                   });
 
@@ -64,10 +76,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                   
                   let tGolos = 0, tAssist = 0, tFin = 0, tDes = 0, tCruz = 0, tCA = 0, tCV = 0;
                   
-                  // Lógica Inteligente de Agregação:
-                  // Se houver uma competição selecionada, procuramos as estatísticas DENTRO dos relatórios de jogo salvos.
-                  // Se não houver filtro, usamos o total "Global" pré-calculado do perfil do jogador (muito mais rápido).
-                  if (filterCompetition) {
+                  if (filterCompetition || filterYear) {
                      teamMatches.forEach(m => {
                        Object.keys(m.dados).forEach(pId => {
                          if (pId !== '_meta' && teamPlayerIds.includes(pId)) {
