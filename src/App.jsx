@@ -44,7 +44,6 @@ export default function App() {
   const [players, setPlayers] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
   
-  // NOVO: Estados de Competição
   const [competitions, setCompetitions] = useState([]);
   const [newCompetitionName, setNewCompetitionName] = useState('');
   
@@ -56,7 +55,6 @@ export default function App() {
   const [expandedPlayers, setExpandedPlayers] = useState([]); 
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
-  // === ESTADOS DO MODO JOGO ===
   const [matchCompetition, setMatchCompetition] = useState(''); 
   const [filterMatchCompetition, setFilterMatchCompetition] = useState(''); 
   
@@ -105,7 +103,6 @@ export default function App() {
   if (!uniqueCategories.includes('Principal')) uniqueCategories.push('Principal');
   if (!uniqueCategories.includes('Sub-20')) uniqueCategories.push('Sub-20');
 
-  // Competições já usadas no histórico (para filtros do histórico)
   const uniqueCompetitionsHistory = [...new Set(matchHistory.map(m => m.dados?._meta?.competicao).filter(Boolean))].sort();
 
   const displayedPlayers = players.filter(p => {
@@ -163,7 +160,6 @@ export default function App() {
     const { data: timesData } = await supabase.from('times').select('nome').order('nome');
     if (timesData) setTeams(timesData.map(t => t.nome));
     
-    // NOVO: Buscar competições cadastradas
     const { data: compData } = await supabase.from('competicoes').select('nome').order('nome');
     if (compData) setCompetitions(compData.map(c => c.nome));
 
@@ -181,7 +177,6 @@ export default function App() {
     if (partidasData) setMatchHistory(partidasData);
   }
 
-  // === NOVO: Criar Competição ===
   const handleAddCompetition = async (e) => {
     e.preventDefault();
     if (!newCompetitionName.trim() || competitions.includes(newCompetitionName.trim())) return alert("Competição inválida ou já existe.");
@@ -440,11 +435,11 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
+        {/* NOVO: Passagem de uniqueCompetitionsHistory para a AbaClubes */}
         {activeTab === 'clubes' && (
-          <AbaClubes teams={teams} players={players} matchHistory={matchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} />
+          <AbaClubes teams={teams} players={players} matchHistory={matchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} uniqueCompetitions={uniqueCompetitionsHistory} />
         )}
 
-        {/* PASSAGEM DOS PROPS DE COMPETIÇÕES PARA A ABA BASE DE DADOS E LIVE MATCH */}
         {activeTab === 'scout' && (
           <AbaBaseDados 
             novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} 
@@ -460,7 +455,7 @@ export default function App() {
         {activeTab === 'live' && (
           <AbaLiveMatch 
             isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} 
-            matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} // AGORA USA A LISTA OFICIAL
+            matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions}
             matchTeam={matchTeam} setMatchTeam={setMatchTeam} 
             matchCategory={matchCategory} setMatchCategory={setMatchCategory}
             matchSquad={matchSquad} setMatchSquad={setMatchSquad} 
