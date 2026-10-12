@@ -4,10 +4,10 @@ export default function AbaLiveMatch({
   isMatchActive, matchTitle, setMatchTitle, matchTeam, setMatchTeam, 
   matchCategory, setMatchCategory,
   matchSquad, setMatchSquad,
-  handleAddToSquad, handleRemoveFromSquad, handleUpdateSquadPlayer,
+  handleAddToSquad, handleRemoveFromSquad, handleUpdateSquadPlayer, handlePerformSubstitution,
   teams, players, iniciarPartida, currentPeriod, formatTime, matchTime, 
   isTimerRunning, setIsTimerRunning, handleFinalizarTempo, 
-  opponentGoals, opponentShots, opponentFinalThird, handleOpponentAction, // NOVO: Props do Adversário
+  opponentGoals, opponentShots, opponentFinalThird, handleOpponentAction, 
   encerrarPartida, matchEventLog, setMatchEventLog, 
   ACOES_LINHA, ACOES_GOLEIRO, matchStats, handleSetLiveAction, handleLiveAction
 }) {
@@ -15,7 +15,6 @@ export default function AbaLiveMatch({
   const [expandedLivePlayers, setExpandedLivePlayers] = useState([]);
   const [subPlayerOut, setSubPlayerOut] = useState(null); 
 
-  // Variável que diz se as estatísticas estão bloqueadas (Cronómetro no Zero)
   const isActionDisabled = matchTime === 0;
 
   const teamCategories = matchTeam 
@@ -32,8 +31,8 @@ export default function AbaLiveMatch({
     const pOut = players.find(p => p.id === playerOutId);
     const pIn = players.find(p => p.id === playerInId);
     
-    handleUpdateSquadPlayer(playerOutId, 'inPitch', false);
-    handleUpdateSquadPlayer(playerInId, 'inPitch', true);
+    // Chama a nova função atómica que resolve a substituição na hora
+    handlePerformSubstitution(playerOutId, playerInId);
     
     setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] 🔄 Substituição: SAIU ${pOut.nome} | ENTROU ${pIn.nome}`, ...prev]);
     setSubPlayerOut(null); 
@@ -142,7 +141,6 @@ export default function AbaLiveMatch({
               </div>
               <button onClick={handleFinalizarTempo} disabled={currentPeriod > 4} className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 py-2 rounded-lg font-bold mb-6 transition disabled:opacity-50">⏹ Finalizar {currentPeriod}º Tempo</button>
 
-              {/* === PAINEL DO ADVERSÁRIO (COM AS NOVAS AÇÕES) === */}
               <div className="w-full bg-gray-950 rounded-lg p-4 border border-red-900/50 mb-6 space-y-2">
                 <h4 className="text-red-400 font-bold text-sm mb-3 flex items-center gap-2">🛡️ Ações do Adversário</h4>
                 
@@ -180,7 +178,7 @@ export default function AbaLiveMatch({
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl h-96 flex flex-col">
               <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2">⏱️ Linha do Tempo</h3>
               <div className="flex-1 bg-gray-950 rounded-lg border border-gray-800 p-3 overflow-y-auto space-y-2">
-                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Eventos e Ações aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
+                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Os Golos, Cartões, Passes e Substituições aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
               </div>
             </div>
           </div>
@@ -216,7 +214,7 @@ export default function AbaLiveMatch({
                         </div>
                       </div>
 
-                      {/* Modal Interno de Substituição (Fica sempre ativo, mesmo se o jogo estiver parado) */}
+                      {/* Modal Interno de Substituição */}
                       {subPlayerOut === sq.id && (
                         <div className="p-3 bg-gray-950 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
                           <p className="text-xs text-orange-400 font-bold mb-2 uppercase tracking-wider">Quem entra no lugar de {player.nome}?</p>
@@ -239,7 +237,6 @@ export default function AbaLiveMatch({
                         <div className="p-3 border-t border-gray-800/50 bg-gray-900/50">
                           {isActionDisabled && <p className="text-[10px] text-red-500 text-center font-bold mb-2 bg-red-950/30 p-1 rounded">⏱️ Inicie o cronómetro para ativar ações.</p>}
                           
-                          {/* Botão de Substituição (Único que funciona sempre) */}
                           <button onClick={(e) => { e.stopPropagation(); setSubPlayerOut(sq.id); }} className="w-full mb-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm font-bold text-gray-300 flex items-center justify-center gap-2 transition">
                             🔄 Substituir Atleta
                           </button>
@@ -268,7 +265,7 @@ export default function AbaLiveMatch({
               </div>
             </div>
 
-            {/* GRUPO: NO BANCO */}
+            {/* GRUPO: NO BANCO (BLOQUEADO E DESATIVADO PARA ESTATÍSTICAS) */}
             {noBanco.length > 0 && (
               <div>
                 <h3 className="text-xl font-black text-orange-400 mb-4 border-b border-gray-800 pb-2 flex justify-between mt-8">
@@ -298,20 +295,21 @@ export default function AbaLiveMatch({
                           </div>
                         </div>
 
+                        {/* Ações (Desativadas e bloqueadas para quem está no banco) */}
                         {isExpanded && (
                           <div className="p-3 border-t border-gray-800/50 bg-gray-900/30">
-                            <p className="text-xs text-orange-500/50 mb-3 text-center">Atleta encontra-se no banco.</p>
+                            <p className="text-[10px] text-orange-500 font-bold mb-3 text-center bg-orange-950/20 p-1 rounded">🚫 Ações bloqueadas enquanto estiver no banco.</p>
                             <div className="grid grid-cols-1 gap-1.5 opacity-50">
                               {playerAcoes.filter(a => a.id !== 'partidas').map(acao => (
                                 <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
                                   <span className="text-xs text-gray-500 truncate pr-2">{acao.nome}</span>
                                   {acao.id === 'minutos' ? (
-                                    <input type="number" min="0" placeholder="0" value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-gray-500 font-bold text-sm rounded border border-gray-700 outline-none" />
+                                    <input type="number" min="0" placeholder="0" disabled={true} value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-gray-500 font-bold text-sm rounded border border-gray-700 outline-none cursor-not-allowed" />
                                   ) : (
                                     <div className="flex space-x-1 items-center">
-                                      <button onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold">-</button>
+                                      <button disabled={true} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold cursor-not-allowed">-</button>
                                       <span className="font-mono w-6 text-center text-gray-500 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
-                                      <button onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold">+</button>
+                                      <button disabled={true} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold cursor-not-allowed">+</button>
                                     </div>
                                   )}
                                 </div>
