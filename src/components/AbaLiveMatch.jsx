@@ -1,92 +1,144 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function AbaLiveMatch({
   isMatchActive, matchTitle, setMatchTitle, matchTeam, setMatchTeam, 
-  matchCategory, setMatchCategory, // NOVO: Filtro de Categoria
-  setMatchSquadIds,
-  teams, matchSquadIds, toggleMatchSquad, players, iniciarPartida, currentPeriod,
-  formatTime, matchTime, isTimerRunning, setIsTimerRunning, handleFinalizarTempo,
-  opponentGoals, handleOpponentGoal, encerrarPartida, matchEventLog, ACOES_LINHA, ACOES_GOLEIRO,
-  matchStats, handleSetLiveAction, handleLiveAction
+  matchCategory, setMatchCategory,
+  matchSquad, setMatchSquad,
+  handleAddToSquad, handleRemoveFromSquad, handleUpdateSquadPlayer,
+  teams, players, iniciarPartida, currentPeriod, formatTime, matchTime, 
+  isTimerRunning, setIsTimerRunning, handleFinalizarTempo, opponentGoals, 
+  handleOpponentGoal, encerrarPartida, matchEventLog, setMatchEventLog, 
+  ACOES_LINHA, ACOES_GOLEIRO, matchStats, handleSetLiveAction, handleLiveAction
 }) {
   
-  // LÓGICA INTELIGENTE: Pega apenas nas categorias que existem dentro do clube selecionado
+  // ESTADOS LOCAIS DO MODO JOGO (Sanfona e Substituição)
+  const [expandedLivePlayers, setExpandedLivePlayers] = useState([]);
+  const [subPlayerOut, setSubPlayerOut] = useState(null); // Guarda o ID de quem está a sair
+
   const teamCategories = matchTeam 
     ? [...new Set(players.filter(p => p.time_nome === matchTeam).map(p => p.categoria).filter(Boolean))]
     : [];
 
+  // Lógica da Sanfona no Modo Jogo
+  const toggleLivePlayer = (id) => {
+    setExpandedLivePlayers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    if(subPlayerOut === id) setSubPlayerOut(null); // Fecha o painel de sub se encolher o jogador
+  };
+
+  // Processo de Substituição
+  const handleSubstitution = (playerOutId, playerInId) => {
+    if(!playerInId) return;
+    const pOut = players.find(p => p.id === playerOutId);
+    const pIn = players.find(p => p.id === playerInId);
+    
+    // Atualiza o estado InPitch para refletir quem está a jogar
+    handleUpdateSquadPlayer(playerOutId, 'inPitch', false);
+    handleUpdateSquadPlayer(playerInId, 'inPitch', true);
+    
+    // Registo de evento imediato
+    setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] 🔄 Substituição: SAIU ${pOut.nome} | ENTROU ${pIn.nome}`, ...prev]);
+    setSubPlayerOut(null); // Fecha modal
+  };
+
+  // Função para desenhar um item na lista de Convocados (Setup)
+  const renderSquadListItem = (sq) => {
+    const p = players.find(player => player.id === sq.id);
+    if(!p) return null;
+    return (
+      <div key={sq.id} className="flex flex-col sm:flex-row items-center bg-gray-900 border border-gray-800 p-2 rounded-lg gap-3">
+        <input 
+          type="number" 
+          placeholder="Nº" 
+          value={sq.numero} 
+          onChange={e => handleUpdateSquadPlayer(sq.id, 'numero', e.target.value)} 
+          className="w-16 p-2 bg-gray-950 rounded border border-gray-700 text-center font-bold outline-none focus:border-blue-500" 
+        />
+        <div className="flex-1 font-bold w-full text-center sm:text-left">
+          {p.nome} <span className="text-xs text-gray-500 font-normal">({p.setor})</span>
+        </div>
+        <select 
+          value={sq.titular ? 'titular' : 'reserva'} 
+          onChange={e => handleUpdateSquadPlayer(sq.id, 'titular', e.target.value === 'titular')} 
+          className="w-full sm:w-auto p-2 bg-gray-950 rounded border border-gray-700 text-sm outline-none font-bold"
+        >
+          <option value="titular">TITULAR</option>
+          <option value="reserva">RESERVA</option>
+        </select>
+        <button onClick={() => handleRemoveFromSquad(sq.id)} className="w-full sm:w-auto text-red-500 hover:text-red-400 font-bold p-2 bg-red-900/20 rounded transition">
+          ✕ Remover
+        </button>
+      </div>
+    );
+  };
+
+  // Agrupamento para o relvado (Jogo a decorrer)
+  const emCampo = matchSquad.filter(s => s.inPitch);
+  const noBanco = matchSquad.filter(s => !s.inPitch);
+
   return (
     <div className="space-y-6">
+      
+      {/* =========================================
+          TELA 1: PREPARAÇÃO DA PARTIDA E CONVOCATÓRIA 
+          ========================================= */}
       {!isMatchActive ? (
-        <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-3xl mx-auto">
+        <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-          <p className="text-gray-400 mb-6">Selecione o clube e a categoria para convocar os jogadores.</p>
+          <p className="text-gray-400 mb-6">Defina o clube, categoria e os seus titulares e reservas.</p>
           <input type="text" placeholder="Ex: Final do Campeonato vs Flamengo" required value={matchTitle} onChange={e => setMatchTitle(e.target.value)} className="w-full p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg mb-4" />
           
           <div className="flex flex-col md:flex-row gap-4 mb-6">
-            
-            {/* 1. SELEÇÃO DO CLUBE */}
-            <select 
-              value={matchTeam} 
-              onChange={(e) => { 
-                setMatchTeam(e.target.value); 
-                setMatchCategory(''); // Se mudar de clube, limpa a categoria
-                setMatchSquadIds([]); // E limpa a convocatória
-              }} 
-              className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500"
-            >
+            <select value={matchTeam} onChange={(e) => { setMatchTeam(e.target.value); setMatchCategory(''); setMatchSquad([]); }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500">
               <option value="">1. Selecionar Clube...</option>
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
 
-            {/* 2. SELEÇÃO DA CATEGORIA (NOVO) */}
-            <select 
-              disabled={!matchTeam} 
-              value={matchCategory} 
-              onChange={(e) => { 
-                setMatchCategory(e.target.value); 
-                setMatchSquadIds([]); // Limpa a convocação para não misturar os jogadores
-              }} 
-              className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50"
-            >
+            <select disabled={!matchTeam} value={matchCategory} onChange={(e) => { setMatchCategory(e.target.value); setMatchSquad([]); }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50">
               <option value="">{matchTeam ? "2. Selecionar Categoria..." : "Selecione o clube primeiro"}</option>
               {teamCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
 
-            {/* 3. CONVOCATÓRIA (Filtra por Clube e Categoria) */}
-            <select 
-              disabled={!matchCategory} 
-              onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} 
-              className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50"
-            >
-              <option value="">{matchCategory ? "3. Convocatória (Atletas)..." : "Selecione a categoria"}</option>
+            <select disabled={!matchCategory} onChange={(e) => { if(e.target.value) handleAddToSquad(e.target.value); e.target.value = ""; }} className="flex-1 p-3 bg-blue-900/20 text-blue-400 font-bold rounded-lg border border-blue-900/50 text-lg outline-none focus:border-blue-500 disabled:opacity-50">
+              <option value="">{matchCategory ? "+ Adicionar à Convocatória..." : "Selecione a categoria"}</option>
               {players
-                .filter(p => p.time_nome === matchTeam && p.categoria === matchCategory && !matchSquadIds.includes(p.id))
+                .filter(p => p.time_nome === matchTeam && p.categoria === matchCategory && !matchSquad.find(s => s.id === p.id))
                 .sort((a,b) => a.nome.localeCompare(b.nome))
                 .map(p => <option key={p.id} value={p.id}>{p.nome} ({p.funcoes?.join(', ') || p.posicao})</option>)
               }
             </select>
-
           </div>
           
-          <div className="flex flex-wrap gap-2 mb-8 min-h-[50px] p-4 bg-gray-950 rounded-lg border border-gray-800">
-            {matchSquadIds.length === 0 && <span className="text-gray-500">Nenhum jogador convocado.</span>}
-            {matchSquadIds.map(id => {
-              const p = players.find(player => player.id === id);
-              if(!p) return null;
-              return (
-                <div key={id} className="flex items-center bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-full text-sm">
-                  <span className="font-bold mr-2">{p.nome}</span>
-                  <button onClick={() => toggleMatchSquad(id)} className="text-gray-500 hover:text-red-400 font-bold border-l border-gray-600 pl-2 ml-1">✕</button>
-                </div>
-              )
-            })}
+          {/* LISTA VERTICAL DE CONVOCADOS (TITULARES E RESERVAS) */}
+          <div className="flex flex-col gap-2 mb-8 p-4 bg-gray-950 rounded-lg border border-gray-800 max-h-[500px] overflow-y-auto">
+            {matchSquad.length === 0 && <div className="text-center py-10 text-gray-500 font-bold">Nenhum jogador selecionado. Adicione no menu acima.</div>}
+            
+            {matchSquad.filter(s => s.titular).length > 0 && (
+              <div className="text-sm font-black text-blue-400 mt-2 border-b border-gray-800 pb-2 uppercase tracking-widest">
+                ⚽ Titulares ({matchSquad.filter(s => s.titular).length}/11)
+              </div>
+            )}
+            {matchSquad.filter(s => s.titular).map(sq => renderSquadListItem(sq))}
+
+            {matchSquad.filter(s => !s.titular).length > 0 && (
+              <div className="text-sm font-black text-orange-400 mt-6 border-b border-gray-800 pb-2 uppercase tracking-widest">
+                🪑 Reservas ({matchSquad.filter(s => !s.titular).length}/12)
+              </div>
+            )}
+            {matchSquad.filter(s => !s.titular).map(sq => renderSquadListItem(sq))}
           </div>
-          <button onClick={iniciarPartida} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl text-lg transition shadow-lg shadow-green-900/20">Iniciar Partida</button>
+
+          <button onClick={iniciarPartida} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl text-lg transition shadow-lg shadow-green-900/20">
+            Iniciar Partida
+          </button>
         </div>
       ) : (
+        
+        /* =========================================
+           TELA 2: MODO JOGO (RELVADO VIRTUAL) 
+           ========================================= */
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           
+          {/* PAINEL CENTRAL DE CRONÓMETRO E ADVERSÁRIO (Esquerda) */}
           <div className="xl:col-span-1 space-y-4">
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl sticky top-20 z-10 flex flex-col items-center">
               <h2 className="text-sm font-bold text-red-500 flex items-center gap-2 mb-2 uppercase tracking-widest text-center"><span className="animate-pulse">🔴</span> {matchTitle}</h2>
@@ -120,42 +172,152 @@ export default function AbaLiveMatch({
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl h-96 flex flex-col">
               <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2">⏱️ Linha do Tempo</h3>
               <div className="flex-1 bg-gray-950 rounded-lg border border-gray-800 p-3 overflow-y-auto space-y-2">
-                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Os Golos, Cartões e Passes aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
+                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Os Golos, Cartões, Passes e Substituições aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
               </div>
             </div>
           </div>
 
-          <div className="xl:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
-            {players.filter(p => matchSquadIds.includes(p.id)).map(player => {
-              const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
-              const funcoesExibicao = player.funcoes && player.funcoes.length > 0 ? player.funcoes.join(' • ') : player.posicao;
+          {/* ÁREA DOS ATLETAS (Direita) */}
+          <div className="xl:col-span-3 space-y-8 content-start">
+            
+            {/* GRUPO: EM CAMPO */}
+            <div>
+              <h3 className="text-xl font-black text-blue-400 mb-4 border-b border-gray-800 pb-2 flex justify-between">
+                <span>⚽ Em Campo</span>
+                <span className="text-sm bg-blue-900/30 text-blue-300 px-3 py-1 rounded-full">{emCampo.length} Atletas</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {emCampo.map(sq => {
+                  const player = players.find(p => p.id === sq.id);
+                  const isExpanded = expandedLivePlayers.includes(sq.id);
+                  const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
 
-              return (
-                <div key={player.id} className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-lg relative overflow-hidden h-fit">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
-                  <div className="mb-3 pb-3 border-b border-gray-800/50 pl-2">
-                    <h4 className="text-base font-bold leading-tight">{player.nome}</h4>
-                    <p className="text-xs text-blue-400 mt-1">{player.setor} | {funcoesExibicao}</p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-1.5 pl-2">
-                    {playerAcoes.filter(a => a.id !== 'partidas').map(acao => (
-                      <div key={acao.id} className={`flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas_dificeis', 'gols_sofridos'].includes(acao.id) ? 'border-l-2 border-l-blue-500/30' : ''}`}>
-                        <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
-                        {acao.id === 'minutos' ? (
-                          <input type="number" min="0" placeholder="0" value={matchStats[player.id]?.[acao.id] === '' ? '' : (matchStats[player.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(player.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(player.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500" />
-                        ) : (
-                          <div className="flex space-x-1 items-center">
-                            <button onClick={() => handleLiveAction(player.id, acao.id, -1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold">-</button>
-                            <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{matchStats[player.id]?.[acao.id] || 0}</span>
-                            <button onClick={() => handleLiveAction(player.id, acao.id, 1)} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-green-900/50 flex items-center justify-center font-bold">+</button>
+                  return (
+                    <div key={sq.id} className="bg-gray-900 rounded-xl border border-gray-800 shadow-lg relative overflow-hidden h-fit transition-all">
+                      <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
+                      
+                      {/* Cabeçalho do Cartão (Clica para expandir) */}
+                      <div className="p-3 cursor-pointer hover:bg-gray-800/50 flex justify-between items-center transition" onClick={() => toggleLivePlayer(sq.id)}>
+                        <div className="pl-2">
+                          <h4 className="text-base font-bold leading-tight flex items-center gap-2">
+                            <span className="bg-gray-800 text-blue-400 px-1.5 py-0.5 rounded font-mono text-xs border border-gray-700">{sq.numero ? sq.numero : '?'}</span> 
+                            {player.nome}
+                          </h4>
+                          <p className="text-xs text-blue-400 mt-1">{player.setor} | {player.funcoes?.join(' • ') || player.posicao}</p>
+                        </div>
+                        <div className="text-gray-500 text-xs font-bold bg-gray-950 px-2 py-1 rounded-full border border-gray-800">
+                          {isExpanded ? 'Ocultar ▲' : 'Ações ▼'}
+                        </div>
+                      </div>
+
+                      {/* Modal Interno de Substituição */}
+                      {subPlayerOut === sq.id && (
+                        <div className="p-3 bg-gray-950 border-t border-gray-800" onClick={(e) => e.stopPropagation()}>
+                          <p className="text-xs text-orange-400 font-bold mb-2 uppercase tracking-wider">Quem entra no lugar de {player.nome}?</p>
+                          <select 
+                            onChange={(e) => handleSubstitution(sq.id, e.target.value)} 
+                            className="w-full p-3 bg-gray-900 rounded border border-gray-700 text-sm font-bold outline-none mb-2 focus:border-orange-500"
+                          >
+                            <option value="">Escolha o reserva...</option>
+                            {noBanco.map(s => {
+                              const p = players.find(x => x.id === s.id);
+                              return <option key={s.id} value={s.id}>Nº {s.numero} - {p.nome} ({p.setor})</option>
+                            })}
+                          </select>
+                          <button onClick={() => setSubPlayerOut(null)} className="w-full py-2 text-xs text-gray-400 font-bold bg-gray-800 rounded hover:bg-gray-700 transition">Cancelar Substituição</button>
+                        </div>
+                      )}
+
+                      {/* Área de Ações Táticas */}
+                      {isExpanded && subPlayerOut !== sq.id && (
+                        <div className="p-3 border-t border-gray-800/50 bg-gray-900/50">
+                          <button onClick={(e) => { e.stopPropagation(); setSubPlayerOut(sq.id); }} className="w-full mb-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm font-bold text-gray-300 flex items-center justify-center gap-2 transition">
+                            🔄 Substituir Atleta
+                          </button>
+                          
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {playerAcoes.filter(a => a.id !== 'partidas').map(acao => (
+                              <div key={acao.id} className={`flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas_dificeis', 'gols_sofridos'].includes(acao.id) ? 'border-l-2 border-l-blue-500/30' : ''}`}>
+                                <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
+                                {acao.id === 'minutos' ? (
+                                  <input type="number" min="0" placeholder="0" value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500" />
+                                ) : (
+                                  <div className="flex space-x-1 items-center">
+                                    <button onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-red-900/50 flex items-center justify-center font-bold transition">-</button>
+                                    <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className="bg-gray-800 text-gray-400 w-7 h-7 rounded hover:bg-green-900/50 flex items-center justify-center font-bold transition">+</button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* GRUPO: NO BANCO */}
+            {noBanco.length > 0 && (
+              <div>
+                <h3 className="text-xl font-black text-orange-400 mb-4 border-b border-gray-800 pb-2 flex justify-between mt-8">
+                  <span>🪑 No Banco (Reservas/Substituídos)</span>
+                  <span className="text-sm bg-orange-900/30 text-orange-300 px-3 py-1 rounded-full">{noBanco.length} Atletas</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 opacity-80">
+                  {noBanco.map(sq => {
+                    const player = players.find(p => p.id === sq.id);
+                    const isExpanded = expandedLivePlayers.includes(sq.id);
+                    const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+
+                    return (
+                      <div key={sq.id} className="bg-gray-900/80 rounded-xl border border-gray-800/50 shadow relative overflow-hidden h-fit transition-all">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-gray-600"></div>
+                        
+                        <div className="p-3 cursor-pointer hover:bg-gray-800/50 flex justify-between items-center transition" onClick={() => toggleLivePlayer(sq.id)}>
+                          <div className="pl-2">
+                            <h4 className="text-base font-bold leading-tight flex items-center gap-2 text-gray-400">
+                              <span className="bg-gray-900 text-gray-500 px-1.5 py-0.5 rounded font-mono text-xs border border-gray-800">{sq.numero ? sq.numero : '?'}</span> 
+                              {player.nome}
+                            </h4>
+                            <p className="text-xs text-orange-500/70 mt-1">{player.setor}</p>
+                          </div>
+                          <div className="text-gray-600 text-xs font-bold">
+                            {isExpanded ? 'Ocultar ▲' : 'Ações ▼'}
+                          </div>
+                        </div>
+
+                        {/* Ações (Desativadas visualmente para quem está no banco, mas editáveis se necessário) */}
+                        {isExpanded && (
+                          <div className="p-3 border-t border-gray-800/50 bg-gray-900/30">
+                            <p className="text-xs text-orange-500/50 mb-3 text-center">Atleta encontra-se no banco.</p>
+                            <div className="grid grid-cols-1 gap-1.5 opacity-50">
+                              {playerAcoes.filter(a => a.id !== 'partidas').map(acao => (
+                                <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
+                                  <span className="text-xs text-gray-500 truncate pr-2">{acao.nome}</span>
+                                  {acao.id === 'minutos' ? (
+                                    <input type="number" min="0" placeholder="0" value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-gray-500 font-bold text-sm rounded border border-gray-700 outline-none" />
+                                  ) : (
+                                    <div className="flex space-x-1 items-center">
+                                      <button onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold">-</button>
+                                      <span className="font-mono w-6 text-center text-gray-500 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
+                                      <button onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold">+</button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
           </div>
         </div>
       )}
