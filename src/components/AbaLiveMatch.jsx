@@ -1,30 +1,72 @@
 import React from 'react';
 
 export default function AbaLiveMatch({
-  isMatchActive, matchTitle, setMatchTitle, matchTeam, setMatchTeam, setMatchSquadIds,
+  isMatchActive, matchTitle, setMatchTitle, matchTeam, setMatchTeam, 
+  matchCategory, setMatchCategory, // NOVO: Filtro de Categoria
+  setMatchSquadIds,
   teams, matchSquadIds, toggleMatchSquad, players, iniciarPartida, currentPeriod,
   formatTime, matchTime, isTimerRunning, setIsTimerRunning, handleFinalizarTempo,
   opponentGoals, handleOpponentGoal, encerrarPartida, matchEventLog, ACOES_LINHA, ACOES_GOLEIRO,
   matchStats, handleSetLiveAction, handleLiveAction
 }) {
+  
+  // LÓGICA INTELIGENTE: Pega apenas nas categorias que existem dentro do clube selecionado
+  const teamCategories = matchTeam 
+    ? [...new Set(players.filter(p => p.time_nome === matchTeam).map(p => p.categoria).filter(Boolean))]
+    : [];
+
   return (
     <div className="space-y-6">
       {!isMatchActive ? (
         <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-3xl mx-auto">
           <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-          <p className="text-gray-400 mb-6">Selecione o clube que vai analisar nesta partida e depois convoque os jogadores.</p>
+          <p className="text-gray-400 mb-6">Selecione o clube e a categoria para convocar os jogadores.</p>
           <input type="text" placeholder="Ex: Final do Campeonato vs Flamengo" required value={matchTitle} onChange={e => setMatchTitle(e.target.value)} className="w-full p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg mb-4" />
           
           <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <select value={matchTeam} onChange={(e) => { setMatchTeam(e.target.value); setMatchSquadIds([]); }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500">
+            
+            {/* 1. SELEÇÃO DO CLUBE */}
+            <select 
+              value={matchTeam} 
+              onChange={(e) => { 
+                setMatchTeam(e.target.value); 
+                setMatchCategory(''); // Se mudar de clube, limpa a categoria
+                setMatchSquadIds([]); // E limpa a convocatória
+              }} 
+              className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500"
+            >
               <option value="">1. Selecionar Clube...</option>
               {teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
 
-            <select disabled={!matchTeam} onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50">
-              <option value="">{matchTeam ? "2. Convocatória (Atletas)..." : "Selecione o clube primeiro"}</option>
-              {players.filter(p => p.time_nome === matchTeam && !matchSquadIds.includes(p.id)).sort((a,b) => a.nome.localeCompare(b.nome)).map(p => <option key={p.id} value={p.id}>{p.nome} ({p.funcoes?.join(', ') || p.posicao})</option>)}
+            {/* 2. SELEÇÃO DA CATEGORIA (NOVO) */}
+            <select 
+              disabled={!matchTeam} 
+              value={matchCategory} 
+              onChange={(e) => { 
+                setMatchCategory(e.target.value); 
+                setMatchSquadIds([]); // Limpa a convocação para não misturar os jogadores
+              }} 
+              className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50"
+            >
+              <option value="">{matchTeam ? "2. Selecionar Categoria..." : "Selecione o clube primeiro"}</option>
+              {teamCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+
+            {/* 3. CONVOCATÓRIA (Filtra por Clube e Categoria) */}
+            <select 
+              disabled={!matchCategory} 
+              onChange={(e) => { if(e.target.value) toggleMatchSquad(e.target.value); e.target.value = ""; }} 
+              className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500 disabled:opacity-50"
+            >
+              <option value="">{matchCategory ? "3. Convocatória (Atletas)..." : "Selecione a categoria"}</option>
+              {players
+                .filter(p => p.time_nome === matchTeam && p.categoria === matchCategory && !matchSquadIds.includes(p.id))
+                .sort((a,b) => a.nome.localeCompare(b.nome))
+                .map(p => <option key={p.id} value={p.id}>{p.nome} ({p.funcoes?.join(', ') || p.posicao})</option>)
+              }
+            </select>
+
           </div>
           
           <div className="flex flex-wrap gap-2 mb-8 min-h-[50px] p-4 bg-gray-950 rounded-lg border border-gray-800">

@@ -54,6 +54,7 @@ export default function App() {
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
   const [matchTeam, setMatchTeam] = useState('');
+  const [matchCategory, setMatchCategory] = useState(''); // NOVO ESTADO: Guarda a categoria selecionada para o jogo
   const [matchSquadIds, setMatchSquadIds] = useState([]);
   const [isMatchActive, setIsMatchActive] = useState(false);
   const [matchTitle, setMatchTitle] = useState('');
@@ -69,7 +70,6 @@ export default function App() {
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [editMatchData, setEditMatchData] = useState(null);
 
-  // === ESTADOS DO COMPARATIVO ===
   const [compareA, setCompareA] = useState('');
   const [filterTeamA, setFilterTeamA] = useState('');
   const [filterCategoryA, setFilterCategoryA] = useState('');
@@ -83,7 +83,6 @@ export default function App() {
   const [showSectorWarning, setShowSectorWarning] = useState(false);
   const [dismissedWarningFor, setDismissedWarningFor] = useState('');
 
-  // === ESTADOS DE ANÁLISE ===
   const [rankMetric, setRankMetric] = useState('gols');
   const [savedMetrics, setSavedMetrics] = useState(() => {
     const localData = localStorage.getItem('scoutpro_custom_metrics');
@@ -102,7 +101,6 @@ export default function App() {
     return true;
   });
 
-  // Filtros dinâmicos para os Dropdowns do Comparativo
   const filteredPlayersA = players.filter(p => {
     if (filterTeamA && p.time_nome !== filterTeamA) return false;
     if (filterCategoryA && p.categoria !== filterCategoryA) return false;
@@ -117,19 +115,14 @@ export default function App() {
     return true;
   });
 
-  // Pop-up inteligente: Ativa quando são selecionados 2 jogadores de setores distintos
   useEffect(() => {
     if (compareA && compareB) {
       const pA = players.find(p => p.id === compareA);
       const pB = players.find(p => p.id === compareB);
       if (pA && pB && pA.setor !== pB.setor) {
         const compareKey = `${compareA}-${compareB}`;
-        if (dismissedWarningFor !== compareKey) {
-          setShowSectorWarning(true);
-        }
-      } else {
-        setShowSectorWarning(false);
-      }
+        if (dismissedWarningFor !== compareKey) setShowSectorWarning(true);
+      } else setShowSectorWarning(false);
     }
   }, [compareA, compareB, players, dismissedWarningFor]);
 
@@ -182,19 +175,16 @@ export default function App() {
     e.preventDefault();
     const funcoesLimpas = novoJogador.funcoes.filter(f => f.trim() !== '');
     if(funcoesLimpas.length === 0) return alert("Selecione pelo menos uma função.");
-
     const payload = {
       nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', 
       setor: novoJogador.setor, funcoes: funcoesLimpas, pe_dominante: novoJogador.pe_dominante,
       altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null,
     };
-
     if (editingPlayerId) {
       const { data, error } = await supabase.from('jogadores').update(payload).eq('id', editingPlayerId).select();
       if (!error && data) { setPlayers(players.map(p => p.id === editingPlayerId ? { ...p, ...payload } : p)); cancelarEdicao(); }
     } else {
-      const acoesIniciais = {}; 
-      const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+      const acoesIniciais = {}; const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
       listaBase.forEach(a => acoesIniciais[a.id] = 0); payload.acoes = acoesIniciais;
       const { data, error } = await supabase.from('jogadores').insert([payload]).select();
       if (!error && data) { setPlayers([...players, data[0]]); cancelarEdicao(); }
@@ -265,7 +255,9 @@ export default function App() {
     const squadTeams = [...new Set(matchSquadIds.map(id => players.find(p => p.id === id)?.time_nome).filter(Boolean))];
     dadosTratados._meta = { eventLog: matchEventLog, periodLogs: periodLogs, gols_sofridos: opponentGoals, equipes: squadTeams };
     const { data, error } = await supabase.from('partidas').insert([{ titulo: matchTitle, dados: dadosTratados }]).select();
-    if (!error && data) { setMatchHistory([data[0], ...matchHistory]); setIsMatchActive(false); setMatchTitle(''); setMatchStats({}); setMatchSquadIds([]); setMatchTeam(''); setActiveTab('historico'); }
+    
+    // NOVO: Adicionado reset da Categoria (setMatchCategory('')) ao encerrar a partida
+    if (!error && data) { setMatchHistory([data[0], ...matchHistory]); setIsMatchActive(false); setMatchTitle(''); setMatchStats({}); setMatchSquadIds([]); setMatchTeam(''); setMatchCategory(''); setActiveTab('historico'); }
   };
 
   // HISTÓRICO EDIÇÃO
@@ -334,24 +326,13 @@ export default function App() {
       <Navbar session={session} activeTab={activeTab} setActiveTab={setActiveTab} />
       <datalist id="categorias-list">{uniqueCategories.map(c => <option key={c} value={c} />)}</datalist>
 
-      {/* MODAL POP-UP DE AVISO (Aparece sobre tudo quando há conflito de setor) */}
       {showSectorWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-gray-900 border-2 border-red-500 rounded-xl p-8 max-w-md w-full shadow-2xl transform transition-all">
             <div className="text-5xl text-center mb-4">⚠️</div>
             <h3 className="text-2xl font-black text-center text-red-500 mb-2">Setores Diferentes!</h3>
-            <p className="text-center text-gray-300 mb-6">
-              Você está a comparar dois atletas que jogam em posições distintas. Ações específicas e estatísticas táticas poderão não refletir uma comparação justa (Ex: um Guarda-redes vs um Atacante).
-            </p>
-            <button 
-              onClick={() => {
-                setShowSectorWarning(false);
-                setDismissedWarningFor(`${compareA}-${compareB}`);
-              }} 
-              className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-red-900/50"
-            >
-              Compreendi, continuar
-            </button>
+            <p className="text-center text-gray-300 mb-6">Você está a comparar dois atletas que jogam em posições distintas. Ações específicas e estatísticas táticas poderão não refletir uma comparação justa (Ex: um Guarda-redes vs um Atacante).</p>
+            <button onClick={() => { setShowSectorWarning(false); setDismissedWarningFor(`${compareA}-${compareB}`); }} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-red-900/50">Compreendi, continuar</button>
           </div>
         </div>
       )}
@@ -367,7 +348,16 @@ export default function App() {
         )}
 
         {activeTab === 'live' && (
-          <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchTeam={matchTeam} setMatchTeam={setMatchTeam} setMatchSquadIds={setMatchSquadIds} teams={teams} matchSquadIds={matchSquadIds} toggleMatchSquad={toggleMatchSquad} players={players} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} handleOpponentGoal={handleOpponentGoal} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />
+          <AbaLiveMatch 
+            isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} 
+            matchTeam={matchTeam} setMatchTeam={setMatchTeam} 
+            matchCategory={matchCategory} setMatchCategory={setMatchCategory} // PASSANDO A NOVA CATEGORIA
+            setMatchSquadIds={setMatchSquadIds} teams={teams} matchSquadIds={matchSquadIds} toggleMatchSquad={toggleMatchSquad} 
+            players={players} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} 
+            isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} 
+            handleOpponentGoal={handleOpponentGoal} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} 
+            matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} 
+          />
         )}
 
         {activeTab === 'historico' && (
@@ -452,8 +442,6 @@ export default function App() {
             <h2 className="text-2xl font-bold mb-6">Frente a Frente Global</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-              
-              {/* === FILTROS ATLETA A === */}
               <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
                 <h3 className="font-bold text-blue-400 text-lg border-b border-gray-800 pb-2">Seleção do Atleta A</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -473,7 +461,6 @@ export default function App() {
                 </select>
               </div>
 
-              {/* === FILTROS ATLETA B === */}
               <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
                 <h3 className="font-bold text-orange-400 text-lg border-b border-gray-800 pb-2">Seleção do Atleta B</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -500,8 +487,6 @@ export default function App() {
                 {TODAS_ACOES.map(acao => {
                   const pA = players.find(p => p.id === compareA); const pB = players.find(p => p.id === compareB);
                   const valA = pA.acoes[acao.id] || 0; const valB = pB.acoes[acao.id] || 0; const max = Math.max(valA, valB, 1);
-                  
-                  // Oculta a linha se a métrica estiver a zeros para os dois jogadores (não polui a vista de Guarda-redes vs Defesa)
                   if (valA === 0 && valB === 0) return null; 
 
                   return (
