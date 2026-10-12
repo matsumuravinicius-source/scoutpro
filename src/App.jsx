@@ -53,6 +53,9 @@ export default function App() {
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
   // === ESTADOS DO MODO JOGO ===
+  const [matchCompetition, setMatchCompetition] = useState(''); // NOVO: Competição
+  const [filterMatchCompetition, setFilterMatchCompetition] = useState(''); // NOVO: Filtro para o histórico
+  
   const [matchTeam, setMatchTeam] = useState('');
   const [matchCategory, setMatchCategory] = useState(''); 
   const [matchSquad, setMatchSquad] = useState([]); 
@@ -97,6 +100,9 @@ export default function App() {
   const uniqueCategories = [...new Set(players.map(p => p.categoria).filter(Boolean))];
   if (!uniqueCategories.includes('Principal')) uniqueCategories.push('Principal');
   if (!uniqueCategories.includes('Sub-20')) uniqueCategories.push('Sub-20');
+
+  // NOVO: Extrai todas as competições que o utilizador já gravou anteriormente
+  const uniqueCompetitions = [...new Set(matchHistory.map(m => m.dados?._meta?.competicao).filter(Boolean))].sort();
 
   const displayedPlayers = players.filter(p => {
     if (filterTeam && p.time_nome !== filterTeam) return false;
@@ -223,7 +229,6 @@ export default function App() {
     await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
   };
 
-  // === LÓGICA DE PLANTEL E JOGO AO VIVO ===
   const handleAddToSquad = (playerId) => {
     if (matchSquad.find(p => p.id === playerId)) return;
     if (matchSquad.length >= 23) return alert("Limite de 23 atletas atingido.");
@@ -253,17 +258,17 @@ export default function App() {
   };
 
   const iniciarPartida = () => { 
+    if (!matchCompetition.trim()) return alert("Defina a Competição.");
     if (matchSquad.length === 0) return alert("Mínimo 1 atleta."); 
     const titularesCount = matchSquad.filter(p => p.titular).length;
     if (titularesCount > 11) return alert("Máximo de 11 titulares permitido.");
-    if (!matchTitle.trim()) return alert("Dê um nome."); 
+    if (!matchTitle.trim()) return alert("Dê um título ao Jogo."); 
     
     setIsMatchActive(true); setMatchTime(0); setIsTimerRunning(true); setCurrentPeriod(1); 
     setPeriodLogs([]); setMatchEventLog([]); 
     setOpponentGoals(0); setOpponentShots(0); setOpponentFinalThird(0);
   };
 
-  // ATUALIZADO: Ao finalizar, permite ir para o "5º" estado (Partida 100% encerrada)
   const handleFinalizarTempo = () => { 
     if (currentPeriod > 4) return; 
     setPeriodLogs(prev => [...prev, `${currentPeriod}º Tempo: ${formatTime(matchTime)}`]); 
@@ -304,7 +309,6 @@ export default function App() {
 
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; if (incrementValue < 0 && currentMatchVal === 0) return;
-    
     if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas', 'defesas_dificeis'].includes(actionId)) {
       const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
       setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] ${players.find(p => p.id === playerId).nome} • ${acaoNome}`, ...prev]);
@@ -323,15 +327,17 @@ export default function App() {
     const dadosTratados = { ...matchStats }; Object.keys(dadosTratados).forEach(pId => { if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
     const squadTeams = [...new Set(matchSquad.map(s => players.find(p => p.id === s.id)?.time_nome).filter(Boolean))];
     
+    // NOVO: competicao gravada nos meta dados
     dadosTratados._meta = { 
       eventLog: matchEventLog, periodLogs: periodLogs, 
       gols_sofridos: opponentGoals, finalizacoes_adversario: opponentShots, ultimo_terco_adversario: opponentFinalThird, 
-      equipes: squadTeams, squad: matchSquad 
+      equipes: squadTeams, squad: matchSquad, competicao: matchCompetition 
     };
 
     const { data, error } = await supabase.from('partidas').insert([{ titulo: matchTitle, dados: dadosTratados }]).select();
     if (!error && data) { 
       setMatchHistory([data[0], ...matchHistory]); setIsMatchActive(false); setMatchTitle(''); 
+      setMatchCompetition(''); // Limpa campo de competicao
       setMatchStats({}); setMatchSquad([]); setMatchTeam(''); setMatchCategory(''); 
       setActiveTab('historico'); 
     }
@@ -425,6 +431,7 @@ export default function App() {
         {activeTab === 'live' && (
           <AbaLiveMatch 
             isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} 
+            matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} uniqueCompetitions={uniqueCompetitions}
             matchTeam={matchTeam} setMatchTeam={setMatchTeam} 
             matchCategory={matchCategory} setMatchCategory={setMatchCategory}
             matchSquad={matchSquad} setMatchSquad={setMatchSquad} 
@@ -439,7 +446,7 @@ export default function App() {
         )}
 
         {activeTab === 'historico' && (
-          <AbaHistorico matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} />
+          <AbaHistorico matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitions} />
         )}
 
         {activeTab === 'analise' && (

@@ -3,19 +3,49 @@ import React from 'react';
 export default function AbaHistorico({
   matchHistory, editingMatchId, editMatchData, setEditMatchData, saveMatchEdit, cancelMatchEdit,
   handleEditMatchClick, handleDeleteMatch, expandedMatch, setExpandedMatch, players, TODAS_ACOES, ACOES_GOLEIRO, ACOES_LINHA,
-  handleSetMatchEditAction, handleUpdateMatchEditAction
+  handleSetMatchEditAction, handleUpdateMatchEditAction,
+  filterMatchCompetition, setFilterMatchCompetition, uniqueCompetitions // RECEBE OS NOVOS FILTROS
 }) {
+  
+  // Aplica o filtro na listagem se alguma competição for selecionada
+  const filteredHistory = filterMatchCompetition
+    ? matchHistory.filter(m => m.dados?._meta?.competicao === filterMatchCompetition)
+    : matchHistory;
+
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold mb-6">Relatórios de Partidas Salvas</h2>
-      {matchHistory.length === 0 ? <div className="text-center py-20 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">Nenhum relatório de partida encontrado.</div> : (
-        matchHistory.map(partida => (
+      
+      {/* CABEÇALHO COM FILTRO DE COMPETIÇÃO */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <h2 className="text-2xl font-bold">Relatórios de Partidas Salvas</h2>
+        <select 
+          value={filterMatchCompetition} 
+          onChange={e => setFilterMatchCompetition(e.target.value)} 
+          className="p-2 bg-gray-900 border border-gray-700 rounded-lg outline-none text-blue-400 font-bold w-full sm:w-auto"
+        >
+          <option value="">Todas as Competições</option>
+          {uniqueCompetitions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {filteredHistory.length === 0 ? <div className="text-center py-20 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">Nenhum relatório de partida encontrado.</div> : (
+        filteredHistory.map(partida => (
           <div key={partida.id} className={`bg-gray-900 rounded-xl border transition ${editingMatchId === partida.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
             <div className="p-4 bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800/50 gap-4">
               {editingMatchId === partida.id ? (
                 <div className="flex-1 w-full"><input type="text" value={editMatchData.titulo} onChange={e => setEditMatchData({...editMatchData, titulo: e.target.value})} className="w-full p-2 bg-gray-950 rounded border border-gray-700 text-blue-400 font-bold outline-none" /></div>
               ) : (
-                <div><h3 className="font-bold text-lg text-blue-400">{partida.titulo}</h3><p className="text-sm text-gray-400">Criado em: {new Date(partida.criado_em).toLocaleDateString()} às {new Date(partida.criado_em).toLocaleTimeString()}</p></div>
+                <div>
+                  <h3 className="font-bold text-lg text-blue-400 flex flex-wrap items-center gap-2">
+                    {partida.dados?._meta?.competicao && (
+                      <span className="bg-blue-900/30 text-blue-300 text-[10px] px-2 py-0.5 rounded uppercase border border-blue-900/50">
+                        {partida.dados._meta.competicao}
+                      </span>
+                    )}
+                    {partida.titulo}
+                  </h3>
+                  <p className="text-sm text-gray-400 mt-1">Criado em: {new Date(partida.criado_em).toLocaleDateString()} às {new Date(partida.criado_em).toLocaleTimeString()}</p>
+                </div>
               )}
               <div className="flex items-center gap-3">
                 {editingMatchId === partida.id ? (
@@ -32,7 +62,6 @@ export default function AbaHistorico({
                    <div className="mb-6 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         
-                        {/* PAINEL DE DURAÇÃO */}
                         {partida.dados._meta.periodLogs?.length > 0 && (
                            <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
                              <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
@@ -40,7 +69,6 @@ export default function AbaHistorico({
                            </div>
                         )}
 
-                        {/* NOVO: PAINEL AVANÇADO DO ADVERSÁRIO */}
                         <div className="bg-gray-950 p-3 rounded-lg border border-red-900/30">
                           <h4 className="text-red-400 font-bold text-sm mb-2">🛡️ Ações do Adversário:</h4>
                           <div className="grid grid-cols-3 gap-2 text-center">
@@ -73,7 +101,6 @@ export default function AbaHistorico({
 
                       </div>
                       
-                      {/* LINHA DO TEMPO (LOGS) */}
                       {partida.dados._meta.eventLog?.length > 0 && (
                          <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-48 overflow-y-auto">
                            <h4 className="text-gray-400 font-bold text-sm mb-2">⏱️ Linha do Tempo (Event Log):</h4>

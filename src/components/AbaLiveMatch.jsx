@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 
 export default function AbaLiveMatch({
-  isMatchActive, matchTitle, setMatchTitle, matchTeam, setMatchTeam, 
+  isMatchActive, matchTitle, setMatchTitle, 
+  matchCompetition, setMatchCompetition, uniqueCompetitions, // RECEBE NOVAS VARIÁVEIS
+  matchTeam, setMatchTeam, 
   matchCategory, setMatchCategory,
   matchSquad, setMatchSquad,
   handleAddToSquad, handleRemoveFromSquad, handleUpdateSquadPlayer, handlePerformSubstitution,
@@ -15,7 +17,6 @@ export default function AbaLiveMatch({
   const [expandedLivePlayers, setExpandedLivePlayers] = useState([]);
   const [subPlayerOut, setSubPlayerOut] = useState(null); 
 
-  // NOVO: A partida é bloqueada se o tempo for 0 OU se já tivermos passado do 4º tempo
   const isActionDisabled = matchTime === 0 || currentPeriod > 4;
 
   const teamCategories = matchTeam 
@@ -76,8 +77,32 @@ export default function AbaLiveMatch({
       {!isMatchActive ? (
         <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-          <p className="text-gray-400 mb-6">Defina o clube, categoria e os seus titulares e reservas.</p>
-          <input type="text" placeholder="Ex: Final do Campeonato vs Flamengo" required value={matchTitle} onChange={e => setMatchTitle(e.target.value)} className="w-full p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg mb-4" />
+          <p className="text-gray-400 mb-6">Defina a competição, título do jogo e a lista de convocados.</p>
+          
+          {/* NOVO: CAMPO DE COMPETIÇÃO E TÍTULO LADO A LADO */}
+          <div className="flex flex-col md:flex-row gap-4 mb-4">
+            <input 
+              type="text" 
+              list="competicoes-list"
+              placeholder="Competição (Ex: Liga Nacional)" 
+              required 
+              value={matchCompetition} 
+              onChange={e => setMatchCompetition(e.target.value)} 
+              className="flex-1 p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500" 
+            />
+            <datalist id="competicoes-list">
+              {uniqueCompetitions.map(c => <option key={c} value={c} />)}
+            </datalist>
+
+            <input 
+              type="text" 
+              placeholder="Título do Jogo (Ex: Final vs Flamengo)" 
+              required 
+              value={matchTitle} 
+              onChange={e => setMatchTitle(e.target.value)} 
+              className="flex-[2] p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500" 
+            />
+          </div>
           
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <select value={matchTeam} onChange={(e) => { setMatchTeam(e.target.value); setMatchCategory(''); setMatchSquad([]); }} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500">
@@ -127,7 +152,13 @@ export default function AbaLiveMatch({
           
           <div className="xl:col-span-1 space-y-4">
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl sticky top-20 z-10 flex flex-col items-center">
-              <h2 className="text-sm font-bold text-red-500 flex items-center gap-2 mb-2 uppercase tracking-widest text-center"><span className="animate-pulse">🔴</span> {matchTitle}</h2>
+              <h2 className="text-sm font-bold text-red-500 flex items-center justify-center gap-2 mb-2 uppercase tracking-widest text-center leading-tight">
+                <span className="animate-pulse">🔴</span> 
+                <div>
+                  <div className="text-[10px] text-gray-400 tracking-normal">{matchCompetition}</div>
+                  <div>{matchTitle}</div>
+                </div>
+              </h2>
               <div className="text-gray-400 font-bold mb-1">{currentPeriod > 4 ? 'Fim de Jogo' : `${currentPeriod}º Tempo`}</div>
               <div className="text-6xl font-mono font-black text-white mb-6 tabular-nums">{formatTime(matchTime)}</div>
               
@@ -147,7 +178,6 @@ export default function AbaLiveMatch({
                 )}
               </div>
 
-              {/* Botão de Finalizar (Completamente bloqueado se passar do 4º tempo) */}
               <button 
                 onClick={handleFinalizarTempo} 
                 disabled={currentPeriod > 4} 
@@ -254,7 +284,7 @@ export default function AbaLiveMatch({
                           {isActionDisabled && currentPeriod > 4 && <p className="text-[10px] text-gray-400 text-center font-bold mb-2 bg-gray-900 p-1 rounded">🛑 Partida Finalizada.</p>}
                           
                           <button 
-                            disabled={currentPeriod > 4} // Só não pode substituir se a partida acabar de vez
+                            disabled={currentPeriod > 4} 
                             onClick={(e) => { e.stopPropagation(); setSubPlayerOut(sq.id); }} 
                             className={`w-full mb-3 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition ${currentPeriod > 4 ? 'bg-gray-900 text-gray-600 cursor-not-allowed' : 'bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300'}`}
                           >
