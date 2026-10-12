@@ -31,21 +31,49 @@ export default function AbaHistorico({
                 {partida.dados._meta && (
                    <div className="mb-6 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        {/* PAINEL DE DURAÇÃO */}
                         {partida.dados._meta.periodLogs?.length > 0 && (
                            <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
                              <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
                              {partida.dados._meta.periodLogs.map((l, i) => <div key={i} className="text-blue-400 font-mono text-sm">{l}</div>)}
                            </div>
                         )}
+
+                        {/* NOVO: PAINEL AVANÇADO DO ADVERSÁRIO */}
                         <div className="bg-gray-950 p-3 rounded-lg border border-red-900/30">
-                          <h4 className="text-red-400 font-bold text-sm mb-2">🛡️ Golos Sofridos (Adversário):</h4>
-                          {editingMatchId === partida.id ? (
-                            <input type="number" min="0" value={editMatchData.dados._meta?.gols_sofridos ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, gols_sofridos: parseInt(e.target.value)||0}}})} className="w-16 p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" />
-                          ) : (
-                            <div className="text-red-400 font-mono text-xl font-bold">{partida.dados._meta?.gols_sofridos ?? 0}</div>
-                          )}
+                          <h4 className="text-red-400 font-bold text-sm mb-2">🛡️ Ações do Adversário:</h4>
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <span className="text-gray-500 text-[10px] uppercase block mb-1">Golos</span>
+                              {editingMatchId === partida.id ? (
+                                <input type="number" min="0" value={editMatchData.dados._meta?.gols_sofridos ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, gols_sofridos: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" />
+                              ) : (
+                                <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.gols_sofridos ?? 0}</div>
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-[10px] uppercase block mb-1">Finaliz.</span>
+                              {editingMatchId === partida.id ? (
+                                <input type="number" min="0" value={editMatchData.dados._meta?.finalizacoes_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, finalizacoes_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" />
+                              ) : (
+                                <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.finalizacoes_adversario ?? 0}</div>
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-[10px] uppercase block mb-1">Últ. Terço</span>
+                              {editingMatchId === partida.id ? (
+                                <input type="number" min="0" value={editMatchData.dados._meta?.ultimo_terco_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, ultimo_terco_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" />
+                              ) : (
+                                <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.ultimo_terco_adversario ?? 0}</div>
+                              )}
+                            </div>
+                          </div>
                         </div>
+
                       </div>
+                      
+                      {/* LINHA DO TEMPO (LOGS) */}
                       {partida.dados._meta.eventLog?.length > 0 && (
                          <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-48 overflow-y-auto">
                            <h4 className="text-gray-400 font-bold text-sm mb-2">⏱️ Linha do Tempo (Event Log):</h4>
@@ -54,6 +82,7 @@ export default function AbaHistorico({
                       )}
                    </div>
                 )}
+                
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-max">
                     <thead><tr className="border-b border-gray-800 text-gray-400 text-sm"><th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">Atleta</th>{TODAS_ACOES.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,4)}.</th>)}</tr></thead>

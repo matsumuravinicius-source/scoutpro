@@ -52,10 +52,10 @@ export default function App() {
   const [expandedPlayers, setExpandedPlayers] = useState([]); 
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
-  // === ESTADOS DO MODO JOGO (ATUALIZADO PARA PLANTEL COMPLEXO) ===
+  // === ESTADOS DO MODO JOGO ===
   const [matchTeam, setMatchTeam] = useState('');
   const [matchCategory, setMatchCategory] = useState(''); 
-  const [matchSquad, setMatchSquad] = useState([]); // Array de objetos {id, numero, titular, inPitch}
+  const [matchSquad, setMatchSquad] = useState([]); 
   const [isMatchActive, setIsMatchActive] = useState(false);
   const [matchTitle, setMatchTitle] = useState('');
   const [matchStats, setMatchStats] = useState({});
@@ -65,7 +65,11 @@ export default function App() {
   const [currentPeriod, setCurrentPeriod] = useState(1);
   const [periodLogs, setPeriodLogs] = useState([]);
   const [matchEventLog, setMatchEventLog] = useState([]);
+  
+  // NOVO: Mais ações para o Adversário
   const [opponentGoals, setOpponentGoals] = useState(0);
+  const [opponentShots, setOpponentShots] = useState(0);
+  const [opponentFinalThird, setOpponentFinalThird] = useState(0);
 
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [editMatchData, setEditMatchData] = useState(null);
@@ -219,32 +223,21 @@ export default function App() {
     await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
   };
 
-  // === LÓGICA DE PLANTEL (LIVE MATCH) ===
+  // === LÓGICA DE PLANTEL E JOGO AO VIVO ===
   const handleAddToSquad = (playerId) => {
     if (matchSquad.find(p => p.id === playerId)) return;
     if (matchSquad.length >= 23) return alert("Limite de 23 atletas atingido.");
-    
-    // Os primeiros 11 adicionados são Titulares por defeito
     const titularesCount = matchSquad.filter(p => p.titular).length;
     const isTitular = titularesCount < 11;
-    
     setMatchSquad([...matchSquad, { id: playerId, numero: '', titular: isTitular, inPitch: isTitular }]);
   };
-
-  const handleRemoveFromSquad = (playerId) => {
-    setMatchSquad(matchSquad.filter(p => p.id !== playerId));
-  };
-
+  const handleRemoveFromSquad = (playerId) => { setMatchSquad(matchSquad.filter(p => p.id !== playerId)); };
   const handleUpdateSquadPlayer = (playerId, field, value) => {
     if (field === 'titular') {
        const titularesCount = matchSquad.filter(p => p.titular && p.id !== playerId).length;
-       if (value === true && titularesCount >= 11) {
-          alert("Já existem 11 titulares."); return;
-       }
+       if (value === true && titularesCount >= 11) { alert("Já existem 11 titulares."); return; }
        const reservasCount = matchSquad.filter(p => !p.titular && p.id !== playerId).length;
-       if (value === false && reservasCount >= 12) {
-          alert("Já existem 12 reservas."); return;
-       }
+       if (value === false && reservasCount >= 12) { alert("Já existem 12 reservas."); return; }
     }
     setMatchSquad(matchSquad.map(p => p.id === playerId ? { ...p, [field]: value, ...(field === 'titular' ? {inPitch: value} : {}) } : p));
   };
@@ -254,10 +247,28 @@ export default function App() {
     const titularesCount = matchSquad.filter(p => p.titular).length;
     if (titularesCount > 11) return alert("Máximo de 11 titulares permitido.");
     if (!matchTitle.trim()) return alert("Dê um nome."); 
-    setIsMatchActive(true); setMatchTime(0); setIsTimerRunning(true); setCurrentPeriod(1); setPeriodLogs([]); setMatchEventLog([]); setOpponentGoals(0); 
+    
+    setIsMatchActive(true); setMatchTime(0); setIsTimerRunning(true); setCurrentPeriod(1); 
+    setPeriodLogs([]); setMatchEventLog([]); 
+    setOpponentGoals(0); setOpponentShots(0); setOpponentFinalThird(0); // Zera dados do adversário
   };
+
   const handleFinalizarTempo = () => { if (currentPeriod > 4) return alert("Limite 4 tempos."); setPeriodLogs(prev => [...prev, `${currentPeriod}º Tempo: ${formatTime(matchTime)}`]); setIsTimerRunning(false); setMatchTime(0); if (currentPeriod < 4) setCurrentPeriod(prev => prev + 1); };
-  const handleOpponentGoal = (increment) => { setOpponentGoals(prev => { const newVal = Math.max(0, prev + increment); if (increment > 0) setMatchEventLog(logs => [`[T${currentPeriod} - ${formatTime(matchTime)}] Adversário • Golo Marcado`, ...logs]); return newVal; }); };
+  
+  // NOVO: Função Globalizada de Eventos do Adversário
+  const handleOpponentAction = (type, increment) => {
+    if (increment > 0) {
+      let nomeAcao = '';
+      if(type === 'golo') nomeAcao = 'Golo Marcado';
+      if(type === 'finalizacao') nomeAcao = 'Finalização';
+      if(type === 'ultimo_terco') nomeAcao = 'Entrada no Último Terço';
+      setMatchEventLog(logs => [`[T${currentPeriod} - ${formatTime(matchTime)}] Adversário • ${nomeAcao}`, ...logs]);
+    }
+    
+    if (type === 'golo') setOpponentGoals(prev => Math.max(0, prev + increment));
+    if (type === 'finalizacao') setOpponentShots(prev => Math.max(0, prev + increment));
+    if (type === 'ultimo_terco') setOpponentFinalThird(prev => Math.max(0, prev + increment));
+  };
 
   const processLiveAction = async (playerId, actionId, newMatchVal, incrementValue) => {
     const prevPlayerStats = matchStats[playerId] || {}; const newPlayerStats = { ...prevPlayerStats, [actionId]: newMatchVal };
@@ -266,6 +277,7 @@ export default function App() {
     let partidasIncrement = 0; if (!wasActive && isNowActive) partidasIncrement = 1; else if (wasActive && !isNowActive) partidasIncrement = -1;
     if (partidasIncrement !== 0) newPlayerStats.partidas = (prevPlayerStats.partidas || 0) + partidasIncrement;
     setMatchStats(prev => ({ ...prev, [playerId]: newPlayerStats }));
+    
     if (incrementValue !== 0 || partidasIncrement !== 0) {
       const player = players.find(p => p.id === playerId); const novasAcoesGlobais = { ...player.acoes };
       if (incrementValue !== 0) novasAcoesGlobais[actionId] = Math.max(0, (parseInt(novasAcoesGlobais[actionId]) || 0) + incrementValue);
@@ -277,7 +289,9 @@ export default function App() {
 
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; if (incrementValue < 0 && currentMatchVal === 0) return;
-    if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave'].includes(actionId)) {
+    
+    // NOVO: Adicionado as defesas na Timeline
+    if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas', 'defesas_dificeis'].includes(actionId)) {
       const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
       setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] ${players.find(p => p.id === playerId).nome} • ${acaoNome}`, ...prev]);
     }
@@ -294,9 +308,20 @@ export default function App() {
     if (!window.confirm("Salvar o relatório e finalizar esta partida?")) return; setIsTimerRunning(false);
     const dadosTratados = { ...matchStats }; Object.keys(dadosTratados).forEach(pId => { if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
     const squadTeams = [...new Set(matchSquad.map(s => players.find(p => p.id === s.id)?.time_nome).filter(Boolean))];
-    dadosTratados._meta = { eventLog: matchEventLog, periodLogs: periodLogs, gols_sofridos: opponentGoals, equipes: squadTeams, squad: matchSquad };
+    
+    // Guardar TUDO (incluindo as novas stats do adversário) no meta-dados
+    dadosTratados._meta = { 
+      eventLog: matchEventLog, periodLogs: periodLogs, 
+      gols_sofridos: opponentGoals, finalizacoes_adversario: opponentShots, ultimo_terco_adversario: opponentFinalThird, 
+      equipes: squadTeams, squad: matchSquad 
+    };
+
     const { data, error } = await supabase.from('partidas').insert([{ titulo: matchTitle, dados: dadosTratados }]).select();
-    if (!error && data) { setMatchHistory([data[0], ...matchHistory]); setIsMatchActive(false); setMatchTitle(''); setMatchStats({}); setMatchSquad([]); setMatchTeam(''); setMatchCategory(''); setActiveTab('historico'); }
+    if (!error && data) { 
+      setMatchHistory([data[0], ...matchHistory]); setIsMatchActive(false); setMatchTitle(''); 
+      setMatchStats({}); setMatchSquad([]); setMatchTeam(''); setMatchCategory(''); 
+      setActiveTab('historico'); 
+    }
   };
 
   // HISTÓRICO EDIÇÃO
@@ -390,11 +415,12 @@ export default function App() {
             isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} 
             matchTeam={matchTeam} setMatchTeam={setMatchTeam} 
             matchCategory={matchCategory} setMatchCategory={setMatchCategory}
-            matchSquad={matchSquad} setMatchSquad={setMatchSquad} // ATUALIZADO PARA SUPORTAR O NOVO FORMATO
+            matchSquad={matchSquad} setMatchSquad={setMatchSquad} 
             handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer}
             teams={teams} players={players} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} 
-            isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} 
-            handleOpponentGoal={handleOpponentGoal} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} 
+            isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} 
+            opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} 
+            encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} 
             matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} 
           />
         )}
@@ -518,7 +544,6 @@ export default function App() {
                   {filteredPlayersB.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.setor || 'S/ Setor'})</option>)}
                 </select>
               </div>
-
             </div>
 
             {compareA && compareB && (
