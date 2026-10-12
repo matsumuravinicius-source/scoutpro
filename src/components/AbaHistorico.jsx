@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function AbaHistorico({
   matchHistory, editingMatchId, editMatchData, setEditMatchData, saveMatchEdit, cancelMatchEdit,
-  handleEditMatchClick, handleDeleteMatch, expandedMatch, setExpandedMatch, players, ACOES_TATICAS,
+  handleEditMatchClick, handleDeleteMatch, expandedMatch, setExpandedMatch, players, TODAS_ACOES, ACOES_GOLEIRO, ACOES_LINHA,
   handleSetMatchEditAction, handleUpdateMatchEditAction
 }) {
   return (
@@ -56,34 +56,45 @@ export default function AbaHistorico({
                 )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-max">
-                    <thead><tr className="border-b border-gray-800 text-gray-400 text-sm"><th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">Atleta</th>{ACOES_TATICAS.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,3)}.</th>)}</tr></thead>
+                    <thead><tr className="border-b border-gray-800 text-gray-400 text-sm"><th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">Atleta</th>{TODAS_ACOES.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,4)}.</th>)}</tr></thead>
                     <tbody>
                       {Object.keys(editingMatchId === partida.id ? editMatchData.dados : partida.dados).filter(id => id !== '_meta').map(playerId => {
                         const p = players.find(x => x.id === playerId) || { nome: 'Removido' };
+                        const isGoleiro = p.setor === 'GOLEIRO (GK)';
+
                         if (editingMatchId === partida.id) {
                           return (
                             <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
-                              <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
-                              {ACOES_TATICAS.map(a => (
-                                <td key={a.id} className="p-1 text-center">
-                                  {['minutos', 'partidas'].includes(a.id) ? (
-                                    <input type="number" min="0" placeholder="0" value={editMatchData.dados[playerId]?.[a.id] === '' ? '' : (editMatchData.dados[playerId]?.[a.id] || 0)} onChange={(e) => handleSetMatchEditAction(playerId, a.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetMatchEditAction(playerId, a.id, '0'); }} className="w-12 p-1 text-center bg-gray-950 text-blue-400 font-bold text-xs rounded border border-gray-700 outline-none" />
-                                  ) : (
-                                    <div className="flex space-x-1 items-center justify-center">
-                                      <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, -1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded hover:bg-red-900/50">-</button>
-                                      <span className="font-mono w-4 text-center text-blue-400 font-bold text-xs">{editMatchData.dados[playerId]?.[a.id] || 0}</span>
-                                      <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, 1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded hover:bg-green-900/50">+</button>
-                                    </div>
-                                  )}
-                                </td>
-                              ))}
+                              <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">{p.nome}</td>
+                              {TODAS_ACOES.map(a => {
+                                const isValid = isGoleiro ? ACOES_GOLEIRO.some(ag => ag.id === a.id) : ACOES_LINHA.some(al => al.id === a.id);
+                                if (!isValid) return <td key={a.id} className="p-1 text-center bg-gray-900/20 text-gray-700">-</td>;
+                                
+                                return (
+                                  <td key={a.id} className="p-1 text-center">
+                                    {['minutos', 'partidas'].includes(a.id) ? (
+                                      <input type="number" min="0" placeholder="0" value={editMatchData.dados[playerId]?.[a.id] === '' ? '' : (editMatchData.dados[playerId]?.[a.id] || 0)} onChange={(e) => handleSetMatchEditAction(playerId, a.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetMatchEditAction(playerId, a.id, '0'); }} className="w-12 p-1 text-center bg-gray-950 text-blue-400 font-bold text-xs rounded border border-gray-700 outline-none" />
+                                    ) : (
+                                      <div className="flex space-x-1 items-center justify-center">
+                                        <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, -1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded hover:bg-red-900/50">-</button>
+                                        <span className="font-mono w-4 text-center text-blue-400 font-bold text-xs">{editMatchData.dados[playerId]?.[a.id] || 0}</span>
+                                        <button onClick={() => handleUpdateMatchEditAction(playerId, a.id, 1)} className="bg-gray-800 text-gray-400 w-5 h-5 rounded hover:bg-green-900/50">+</button>
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
                             </tr>
                           );
                         }
                         return (
                           <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
-                            <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937]">{p.nome}</td>
-                            {ACOES_TATICAS.map(a => <td key={a.id} className="p-2 text-center font-mono text-gray-300">{partida.dados[playerId]?.[a.id] || 0}</td>)}
+                            <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">{p.nome}</td>
+                            {TODAS_ACOES.map(a => {
+                                const isValid = isGoleiro ? ACOES_GOLEIRO.some(ag => ag.id === a.id) : (!p.setor || ACOES_LINHA.some(al => al.id === a.id));
+                                if (!isValid) return <td key={a.id} className="p-2 text-center text-gray-700">-</td>;
+                                return <td key={a.id} className="p-2 text-center font-mono text-gray-300">{partida.dados[playerId]?.[a.id] || 0}</td>
+                            })}
                           </tr>
                         );
                       })}

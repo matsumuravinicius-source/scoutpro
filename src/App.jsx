@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-
-// Importação das nossas novas peças de LEGO!
 import Login from './components/Login';
 import Navbar from './components/Navbar';
 import AbaClubes from './components/AbaClubes';
@@ -9,21 +7,36 @@ import AbaBaseDados from './components/AbaBaseDados';
 import AbaLiveMatch from './components/AbaLiveMatch';
 import AbaHistorico from './components/AbaHistorico';
 
-export const ACOES_TATICAS = [
-  { id: 'partidas', nome: 'Partidas' },
-  { id: 'minutos', nome: 'Minutos Jogados' },
-  { id: 'gols', nome: 'Golos' },
-  { id: 'assistencias', nome: 'Assistências' },
-  { id: 'finalizacoes', nome: 'Finalizações' },
-  { id: 'passes_chave', nome: 'Passes Chave' },
-  { id: 'cruzamentos', nome: 'Cruzamentos' },
-  { id: 'desarmes', nome: 'Desarmes' },
-  { id: 'duelos_aereos', nome: 'Duelos Aéreos' },
-  { id: 'progressoes', nome: 'Progressões' },
-  { id: 'perdas_posse', nome: 'Perdas de Posse' },
-  { id: 'cartoes_amarelos', nome: 'Cartões Amarelos' },
+// === LISTAS PRÉ-DEFINIDAS (SETORES E FUNÇÕES) ===
+export const SETORES = {
+  'GOLEIRO (GK)': ['GOLEIRO (GK)'],
+  'DEFENSORES (DEF)': ['ZAGUEIRO (ZAG)', 'LATERAL DIREITO (LD)', 'LATERAL ESQUERDO (LE)'],
+  'MÉDIOS (MEI)': ['VOLANTE (VOL)', 'MEIA CENTRAL (MC)', '2º VOLANTE (2ºV)', 'MEIA ATACANTE (MEI)'],
+  'ATACANTES (ATA)': ['EXTREMO (EX)', 'CENTRO AVANTE (CA)', 'FALSO 9 (F9)']
+};
+
+// === AÇÕES TÁTICAS (LINHA VS GOLEIRO) ===
+export const ACOES_LINHA = [
+  { id: 'partidas', nome: 'Partidas' }, { id: 'minutos', nome: 'Minutos Jogados' },
+  { id: 'gols', nome: 'Golos' }, { id: 'assistencias', nome: 'Assistências' },
+  { id: 'finalizacoes', nome: 'Finalizações' }, { id: 'passes_chave', nome: 'Passes Chave' },
+  { id: 'cruzamentos', nome: 'Cruzamentos' }, { id: 'desarmes', nome: 'Desarmes' },
+  { id: 'duelos_aereos', nome: 'Duelos Aéreos' }, { id: 'progressoes', nome: 'Progressões' },
+  { id: 'perdas_posse', nome: 'Perdas de Posse' }, { id: 'cartoes_amarelos', nome: 'Cartões Amarelos' },
   { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos' }
 ];
+
+export const ACOES_GOLEIRO = [
+  { id: 'partidas', nome: 'Partidas' }, { id: 'minutos', nome: 'Minutos Jogados' },
+  { id: 'defesas', nome: 'Defesas' }, { id: 'defesas_dificeis', nome: 'Defesas difíceis' },
+  { id: 'saida_meta', nome: 'Saída de meta' }, { id: 'confrontos', nome: 'Confrontos' },
+  { id: 'tiros_meta', nome: 'Tiros de meta' }, { id: 'acoes_pes', nome: 'Ações com os pés' },
+  { id: 'cartoes_amarelos', nome: 'Cartões Amarelos' }, { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos' },
+  { id: 'gols_sofridos', nome: 'Gols Sofridos' }
+];
+
+// Uma lista combinada apenas para os Cabeçalhos das Tabelas Gerais
+export const TODAS_ACOES = [...new Map([...ACOES_LINHA, ...ACOES_GOLEIRO].map(item => [item.id, item])).values()];
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -39,7 +52,8 @@ export default function App() {
   const [newTeamName, setNewTeamName] = useState('');
   const [editingPlayerId, setEditingPlayerId] = useState(null);
   const [expandedPlayers, setExpandedPlayers] = useState([]); 
-  const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
+  // Estado de novo jogador atualizado para Setor e Funções (Array)
+  const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
   const [matchTeam, setMatchTeam] = useState('');
   const [matchSquadIds, setMatchSquadIds] = useState([]);
@@ -103,7 +117,9 @@ export default function App() {
     const { data: jogadoresData } = await supabase.from('jogadores').select('*');
     if (jogadoresData) {
       const jogadoresFormatados = jogadoresData.map(j => {
-        const acoesBase = {}; ACOES_TATICAS.forEach(a => acoesBase[a.id] = j.acoes?.[a.id] || 0);
+        const acoesBase = {}; 
+        const listaRelevante = j.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+        listaRelevante.forEach(a => acoesBase[a.id] = j.acoes?.[a.id] || 0);
         return { ...j, acoes: acoesBase };
       });
       setPlayers(jogadoresFormatados);
@@ -122,15 +138,25 @@ export default function App() {
 
   const handleSavePlayer = async (e) => {
     e.preventDefault();
+    // Limpar funcoes vazias antes de gravar
+    const funcoesLimpas = novoJogador.funcoes.filter(f => f.trim() !== '');
+    if(funcoesLimpas.length === 0) return alert("Selecione pelo menos uma função.");
+
     const payload = {
-      nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', posicao: novoJogador.posicao, pe_dominante: novoJogador.pe_dominante,
+      nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', 
+      setor: novoJogador.setor, funcoes: funcoesLimpas, pe_dominante: novoJogador.pe_dominante,
       altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null,
     };
+
     if (editingPlayerId) {
       const { data, error } = await supabase.from('jogadores').update(payload).eq('id', editingPlayerId).select();
       if (!error && data) { setPlayers(players.map(p => p.id === editingPlayerId ? { ...p, ...payload } : p)); cancelarEdicao(); }
     } else {
-      const acoesIniciais = {}; ACOES_TATICAS.forEach(a => acoesIniciais[a.id] = 0); payload.acoes = acoesIniciais;
+      const acoesIniciais = {}; 
+      const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+      listaBase.forEach(a => acoesIniciais[a.id] = 0); 
+      payload.acoes = acoesIniciais;
+      
       const { data, error } = await supabase.from('jogadores').insert([payload]).select();
       if (!error && data) { setPlayers([...players, data[0]]); cancelarEdicao(); }
     }
@@ -139,10 +165,10 @@ export default function App() {
   const handleEditClick = (player) => {
     if (editingPlayerId === player.id) { cancelarEdicao(); return; }
     setEditingPlayerId(player.id);
-    setNovoJogador({ nome: player.nome, time_nome: player.time_nome, categoria: player.categoria, posicao: player.posicao, altura: player.altura, pe_dominante: player.pe_dominante, percentual_gordura: player.percentual_gordura, velocidade_maxima: player.velocidade_maxima, ano_nascimento: player.ano_nascimento || '' });
+    setNovoJogador({ nome: player.nome, time_nome: player.time_nome, categoria: player.categoria, setor: player.setor || '', funcoes: (player.funcoes?.length > 0) ? player.funcoes : [''], altura: player.altura, pe_dominante: player.pe_dominante, percentual_gordura: player.percentual_gordura, velocidade_maxima: player.velocidade_maxima, ano_nascimento: player.ano_nascimento || '' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const cancelarEdicao = () => { setEditingPlayerId(null); setNovoJogador({ nome: '', time_nome: '', categoria: '', posicao: '', altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' }); };
+  const cancelarEdicao = () => { setEditingPlayerId(null); setNovoJogador({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' }); };
   const handleDeletePlayer = async (playerId, playerName) => { if (window.confirm(`Excluir permanentemente o atleta "${playerName}"?`)) { const { error } = await supabase.from('jogadores').delete().eq('id', playerId); if (!error) { setPlayers(players.filter(p => p.id !== playerId)); setMatchSquadIds(matchSquadIds.filter(id => id !== playerId)); } } };
   const toggleExpandPlayer = (id) => { setExpandedPlayers(prev => prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]); };
 
@@ -182,7 +208,7 @@ export default function App() {
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; if (incrementValue < 0 && currentMatchVal === 0) return;
     if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave'].includes(actionId)) {
-      const acaoNome = ACOES_TATICAS.find(a => a.id === actionId).nome;
+      const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
       setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] ${players.find(p => p.id === playerId).nome} • ${acaoNome}`, ...prev]);
     }
     await processLiveAction(playerId, actionId, currentMatchVal + incrementValue, incrementValue);
@@ -212,7 +238,7 @@ export default function App() {
     const originalMatch = matchHistory.find(m => m.id === partidaId); if (!originalMatch) return;
     const dadosTratados = { ...editMatchData.dados }; Object.keys(dadosTratados).forEach(pId => { if (pId !== '_meta' && dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
     const diffs = {}; const allPlayerIds = new Set([...Object.keys(originalMatch.dados).filter(id => id !== '_meta'), ...Object.keys(dadosTratados).filter(id => id !== '_meta')]);
-    allPlayerIds.forEach(pId => { const oldStats = originalMatch.dados[pId] || {}; const newStats = dadosTratados[pId] || {}; diffs[pId] = {}; ACOES_TATICAS.forEach(acao => { const dif = (parseInt(newStats[acao.id]) || 0) - (parseInt(oldStats[acao.id]) || 0); if (dif !== 0) diffs[pId][acao.id] = dif; }); });
+    allPlayerIds.forEach(pId => { const oldStats = originalMatch.dados[pId] || {}; const newStats = dadosTratados[pId] || {}; diffs[pId] = {}; TODAS_ACOES.forEach(acao => { const dif = (parseInt(newStats[acao.id]) || 0) - (parseInt(oldStats[acao.id]) || 0); if (dif !== 0) diffs[pId][acao.id] = dif; }); });
     const { error } = await supabase.from('partidas').update({ titulo: editMatchData.titulo, dados: dadosTratados }).eq('id', partidaId); if (error) return alert("Erro ao salvar.");
     let updatedPlayers = [...players];
     for (const pId of Object.keys(diffs)) {
@@ -236,7 +262,7 @@ export default function App() {
           const oldStats = originalMatch.dados[pId] || {}; const pIndex = updatedPlayers.findIndex(p => p.id === pId);
           if (pIndex !== -1) {
             const player = updatedPlayers[pIndex]; const novasAcoesGlobais = { ...player.acoes };
-            ACOES_TATICAS.forEach(acao => { const oldVal = parseInt(oldStats[acao.id]) || 0; if (oldVal > 0) novasAcoesGlobais[acao.id] = Math.max(0, (parseInt(novasAcoesGlobais[acao.id]) || 0) - oldVal); });
+            TODAS_ACOES.forEach(acao => { const oldVal = parseInt(oldStats[acao.id]) || 0; if (oldVal > 0) novasAcoesGlobais[acao.id] = Math.max(0, (parseInt(novasAcoesGlobais[acao.id]) || 0) - oldVal); });
             updatedPlayers[pIndex] = { ...player, acoes: novasAcoesGlobais }; await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', pId);
           }
         }
@@ -251,7 +277,7 @@ export default function App() {
   const handleDeleteCustomMetric = (id) => { if(!window.confirm("Remover métrica?")) return; const metricList = savedMetrics.filter(m => m.id !== id); setSavedMetrics(metricList); localStorage.setItem('scoutpro_custom_metrics', JSON.stringify(metricList)); if (selectedMetricId === id) setSelectedMetricId(metricList[0]?.id || null); };
   const calculateCustomMetric = (player, metricObj) => { if (!metricObj) return 0; const num = parseFloat(player.acoes[metricObj.numerador]) || 0; const den = parseFloat(player.acoes[metricObj.denominador]) || 0; return den === 0 ? 0 : (num / den).toFixed(3); };
   const getAnalyzedPlayers = () => { const selectedMetricObj = savedMetrics.find(m => m.id === selectedMetricId); if(!selectedMetricObj) return []; return [...displayedPlayers].sort((a, b) => calculateCustomMetric(b, selectedMetricObj) - calculateCustomMetric(a, selectedMetricObj)); };
-  const getRankedPlayers = () => [...displayedPlayers].sort((a, b) => b.acoes[rankMetric] - a.acoes[rankMetric]);
+  const getRankedPlayers = () => [...displayedPlayers].sort((a, b) => (b.acoes[rankMetric]||0) - (a.acoes[rankMetric]||0));
   const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
   const GlobalFilters = () => (
@@ -276,18 +302,17 @@ export default function App() {
         )}
 
         {activeTab === 'scout' && (
-          <AbaBaseDados novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={<GlobalFilters />} displayedPlayers={displayedPlayers} toggleExpandPlayer={toggleExpandPlayer} handleEditClick={handleEditClick} handleDeletePlayer={handleDeletePlayer} getIdade={getIdade} expandedPlayers={expandedPlayers} ACOES_TATICAS={ACOES_TATICAS} handleSetGlobalAction={handleSetGlobalAction} handleUpdateGlobalActions={handleUpdateGlobalActions} />
+          <AbaBaseDados novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={<GlobalFilters />} displayedPlayers={displayedPlayers} toggleExpandPlayer={toggleExpandPlayer} handleEditClick={handleEditClick} handleDeletePlayer={handleDeletePlayer} getIdade={getIdade} expandedPlayers={expandedPlayers} SETORES={SETORES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetGlobalAction={handleSetGlobalAction} handleUpdateGlobalActions={handleUpdateGlobalActions} />
         )}
 
         {activeTab === 'live' && (
-          <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchTeam={matchTeam} setMatchTeam={setMatchTeam} setMatchSquadIds={setMatchSquadIds} teams={teams} matchSquadIds={matchSquadIds} toggleMatchSquad={toggleMatchSquad} players={players} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} handleOpponentGoal={handleOpponentGoal} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} ACOES_TATICAS={ACOES_TATICAS} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />
+          <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchTeam={matchTeam} setMatchTeam={setMatchTeam} setMatchSquadIds={setMatchSquadIds} teams={teams} matchSquadIds={matchSquadIds} toggleMatchSquad={toggleMatchSquad} players={players} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} handleOpponentGoal={handleOpponentGoal} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />
         )}
 
         {activeTab === 'historico' && (
-          <AbaHistorico matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} ACOES_TATICAS={ACOES_TATICAS} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} />
+          <AbaHistorico matchHistory={matchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={players} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} />
         )}
 
-        {/* AS ABAS ABAIXO FICARAM NO APP.JSX PARA MANTER O CONTEXTO LEVE */}
         {activeTab === 'analise' && (
           <div className="space-y-6">
             <GlobalFilters />
@@ -296,9 +321,9 @@ export default function App() {
               <form onSubmit={handleSaveCustomMetric} className="flex flex-col md:flex-row gap-4 items-center">
                 <input type="text" placeholder="Nome (Ex: Golos/Minuto)" required value={novaMetrica.nome} onChange={e => setNovaMetrica({...novaMetrica, nome: e.target.value})} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm w-full" />
                 <div className="flex items-center gap-2 w-full md:w-auto">
-                  <select required value={novaMetrica.numerador} onChange={e => setNovaMetrica({...novaMetrica, numerador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none"><option value="">Numerador (X)...</option>{ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select>
+                  <select required value={novaMetrica.numerador} onChange={e => setNovaMetrica({...novaMetrica, numerador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none"><option value="">Numerador (X)...</option>{TODAS_ACOES.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select>
                   <span className="font-black text-xl text-gray-600">÷</span>
-                  <select required value={novaMetrica.denominador} onChange={e => setNovaMetrica({...novaMetrica, denominador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none"><option value="">Denominador (Y)...</option>{ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select>
+                  <select required value={novaMetrica.denominador} onChange={e => setNovaMetrica({...novaMetrica, denominador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none"><option value="">Denominador (Y)...</option>{TODAS_ACOES.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select>
                 </div>
                 <button type="submit" className="w-full md:w-auto px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg">Salvar</button>
               </form>
@@ -324,7 +349,7 @@ export default function App() {
                       return (
                         <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
                           <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
-                          <td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.posicao} | {player.time_nome}</span></td>
+                          <td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.funcoes?.join(' • ') || player.posicao} | {player.time_nome}</span></td>
                           <td className="p-3 text-right text-xs font-mono text-gray-500">{(player.acoes[metricObj.numerador] || 0)} / {(player.acoes[metricObj.denominador] || 0)}</td>
                           <td className="p-3 text-right font-mono text-xl text-green-400 font-bold">{calculateCustomMetric(player, metricObj)}</td>
                         </tr>
@@ -344,7 +369,7 @@ export default function App() {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Ranking de Atletas</h2>
                 <select value={rankMetric} onChange={e => setRankMetric(e.target.value)} className="p-2 bg-gray-800 rounded border border-gray-700 font-bold text-blue-400 outline-none">
-                  {ACOES_TATICAS.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                  {TODAS_ACOES.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
                 </select>
               </div>
               <div className="overflow-x-auto">
@@ -352,7 +377,7 @@ export default function App() {
                   <thead><tr className="border-b border-gray-800 text-gray-400"><th className="p-3">#</th><th className="p-3">Atleta</th><th className="p-3 text-right">Métrica</th></tr></thead>
                   <tbody>
                     {getRankedPlayers().map((player, idx) => (
-                      <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20"><td className="p-3 font-mono text-gray-500">{idx + 1}</td><td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.posicao} | {player.time_nome}</span></td><td className="p-3 text-right font-mono text-xl text-green-400">{player.acoes[rankMetric]}</td></tr>
+                      <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20"><td className="p-3 font-mono text-gray-500">{idx + 1}</td><td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.funcoes?.join(' • ') || player.posicao} | {player.time_nome}</span></td><td className="p-3 text-right font-mono text-xl text-green-400">{player.acoes[rankMetric] || 0}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -374,9 +399,10 @@ export default function App() {
             </div>
             {compareA && compareB && (
               <div className="space-y-6">
-                {ACOES_TATICAS.map(acao => {
+                {TODAS_ACOES.map(acao => {
                   const pA = players.find(p => p.id === compareA); const pB = players.find(p => p.id === compareB);
                   const valA = pA.acoes[acao.id] || 0; const valB = pB.acoes[acao.id] || 0; const max = Math.max(valA, valB, 1);
+                  if (valA === 0 && valB === 0) return null; // Esconde ações que ambos têm a zero para não poluir
                   return (
                     <div key={acao.id} className="relative">
                       <div className="flex justify-between text-sm text-gray-400 mb-1 px-1"><span className="font-mono text-blue-400 font-bold">{valA}</span><span className="uppercase tracking-widest text-xs">{acao.nome}</span><span className="font-mono text-orange-400 font-bold">{valB}</span></div>
