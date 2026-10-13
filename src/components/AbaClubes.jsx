@@ -17,7 +17,6 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
 
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
         
-        {/* FILTROS DA TABELA DE CLUBES */}
         <div className="flex flex-col sm:flex-row justify-end mb-4 gap-3">
            <div className="flex items-center gap-2">
              <span className="text-gray-400 font-bold text-sm">📅 Ano:</span>
@@ -52,7 +51,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                 <th className="p-3 text-center text-blue-400">Golos</th>
                 <th className="p-3 text-center text-red-400">Golos Sofridos</th>
                 <th className="p-3 text-center">Assistências</th>
-                <th className="p-3 text-center">Finalizações</th>
+                <th className="p-3 text-center text-green-400">Fin. Certas</th>
+                <th className="p-3 text-center text-orange-400">Fin. Erradas</th>
                 <th className="p-3 text-center">Desarmes</th>
                 <th className="p-3 text-center">Cruzamentos</th>
                 <th className="p-3 text-center text-yellow-400">Cartões Amarelos</th>
@@ -61,11 +61,10 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
             </thead>
             <tbody>
               {teams.length === 0 ? (
-                <tr><td colSpan="10" className="p-6 text-center text-gray-500">Nenhum clube registado.</td></tr>
+                <tr><td colSpan="11" className="p-6 text-center text-gray-500">Nenhum clube registado.</td></tr>
               ) : (
                 teams.map(team => {
                   
-                  // O filtro agora verifica se bate com a Competição E com o Ano
                   const teamMatches = matchHistory.filter(m => {
                     if (filterCompetition && m.dados?._meta?.competicao !== filterCompetition) return false;
                     if (filterYear && new Date(m.criado_em).getFullYear().toString() !== filterYear) return false;
@@ -74,7 +73,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
 
                   const teamPlayerIds = players.filter(p => p.time_nome === team).map(p => p.id);
                   
-                  let tGolos = 0, tAssist = 0, tFin = 0, tDes = 0, tCruz = 0, tCA = 0, tCV = 0;
+                  let tGolos = 0, tAssist = 0, tFinCertas = 0, tFinErradas = 0, tDes = 0, tCruz = 0, tCA = 0, tCV = 0;
                   
                   if (filterCompetition || filterYear) {
                      teamMatches.forEach(m => {
@@ -83,7 +82,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                            const st = m.dados[pId];
                            tGolos += parseInt(st.gols || 0);
                            tAssist += parseInt(st.assistencias || 0);
-                           tFin += parseInt(st.finalizacoes || 0);
+                           tFinCertas += parseInt(st.finalizacoes_certas || 0);
+                           tFinErradas += parseInt(st.finalizacoes_erradas || 0);
                            tDes += parseInt(st.desarmes || 0);
                            tCruz += parseInt(st.cruzamentos || 0);
                            tCA += parseInt(st.cartoes_amarelos || 0);
@@ -95,7 +95,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                      const teamPlayers = players.filter(p => p.time_nome === team);
                      tGolos = teamPlayers.reduce((sum, p) => sum + (p.acoes.gols || 0), 0);
                      tAssist = teamPlayers.reduce((sum, p) => sum + (p.acoes.assistencias || 0), 0);
-                     tFin = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes || 0), 0);
+                     tFinCertas = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes_certas || 0), 0);
+                     tFinErradas = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes_erradas || 0), 0);
                      tDes = teamPlayers.reduce((sum, p) => sum + (p.acoes.desarmes || 0), 0);
                      tCruz = teamPlayers.reduce((sum, p) => sum + (p.acoes.cruzamentos || 0), 0);
                      tCA = teamPlayers.reduce((sum, p) => sum + (p.acoes.cartoes_amarelos || 0), 0);
@@ -112,7 +113,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                       <td className="p-3 text-center font-mono text-blue-400 font-bold">{tGolos}</td>
                       <td className="p-3 text-center font-mono text-red-400 font-bold">{tSofridos}</td>
                       <td className="p-3 text-center font-mono text-gray-300">{tAssist}</td>
-                      <td className="p-3 text-center font-mono text-gray-300">{tFin}</td>
+                      <td className="p-3 text-center font-mono text-green-400">{tFinCertas}</td>
+                      <td className="p-3 text-center font-mono text-orange-400">{tFinErradas}</td>
                       <td className="p-3 text-center font-mono text-gray-300">{tDes}</td>
                       <td className="p-3 text-center font-mono text-gray-300">{tCruz}</td>
                       <td className="p-3 text-center font-mono text-yellow-400">{tCA}</td>

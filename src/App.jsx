@@ -21,7 +21,12 @@ export const SETORES = {
 export const ACOES_LINHA = [
   { id: 'partidas', nome: 'Partidas' }, { id: 'minutos', nome: 'Minutos Jogados' },
   { id: 'gols', nome: 'Golos' }, { id: 'assistencias', nome: 'Assistências' },
-  { id: 'finalizacoes', nome: 'Finalizações' }, { id: 'passes_chave', nome: 'Passes Chave' },
+  
+  // === AQUI ESTÁ A DIFERENCIAÇÃO DAS FINALIZAÇÕES ===
+  { id: 'finalizacoes_certas', nome: 'Fin. Certas' }, 
+  { id: 'finalizacoes_erradas', nome: 'Fin. Erradas' }, 
+  
+  { id: 'passes_chave', nome: 'Passes Chave' },
   { id: 'cruzamentos', nome: 'Cruzamentos' }, { id: 'desarmes', nome: 'Desarmes' },
   { id: 'duelos_aereos', nome: 'Duelos Aéreos' }, { id: 'progressoes', nome: 'Progressões' },
   { id: 'perdas_posse', nome: 'Perdas de Posse' }, { id: 'cartoes_amarelos', nome: 'Cartões Amarelos' },
