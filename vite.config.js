@@ -1,7 +1,10 @@
-import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // LÓGICA INTELIGENTE:
+  // Se detetar que está no servidor da Vercel, usa '/' (Padrão Web)
+  // Se detetar que está no seu computador a criar o .exe, usa './' (Padrão Desktop)
+  base: process.env.VERCEL ? '/' : './',
 })
