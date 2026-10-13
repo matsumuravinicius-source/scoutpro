@@ -218,9 +218,21 @@ export default function App() {
 
   const handleAddCompetition = async (e) => {
     e.preventDefault();
-    if (!newCompetitionName.trim() || competitions.includes(newCompetitionName.trim())) return alert("Competição inválida ou já existe.");
+    if (!newCompetitionName.trim() || competitions.includes(newCompetitionName.trim())) {
+      return alert("Aviso: Competição inválida ou já existe na lista.");
+    }
+    
+    // Tenta gravar na base de dados
     const { error } = await supabase.from('competicoes').insert([{ nome: newCompetitionName.trim() }]);
-    if (!error) { setCompetitions([...competitions, newCompetitionName.trim()].sort()); setNewCompetitionName(''); }
+    
+    // Se der erro, mostra qual é o problema
+    if (error) {
+      alert("Erro do Supabase: " + error.message);
+    } else { 
+      setCompetitions([...competitions, newCompetitionName.trim()].sort()); 
+      setNewCompetitionName(''); 
+      alert("✅ Competição adicionada com sucesso!");
+    }
   };
 
   const handleAddTeam = async (e) => {
