@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 export default function AbaLiveMatch({
   isMatchActive, matchTitle, setMatchTitle, 
-  matchDate, setMatchDate, // NOVOS PROPS DE DATA
+  matchDate, setMatchDate,
   matchCompetition, setMatchCompetition, competitions,
   matchTeam, setMatchTeam, 
   matchCategory, setMatchCategory,
@@ -23,6 +23,16 @@ export default function AbaLiveMatch({
   const teamCategories = matchTeam 
     ? [...new Set(players.filter(p => p.time_nome === matchTeam).map(p => p.categoria).filter(Boolean))]
     : [];
+
+  // Função para agrupar as ações nos novos sub-menus
+  const groupActionsByCategory = (acoesArray) => {
+    return acoesArray.reduce((acc, acao) => {
+      const catName = acao.categoria || 'Geral';
+      if (!acc[catName]) acc[catName] = [];
+      acc[catName].push(acao);
+      return acc;
+    }, {});
+  };
 
   const toggleLivePlayer = (id) => {
     setExpandedLivePlayers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -100,7 +110,6 @@ export default function AbaLiveMatch({
               className="flex-[2] p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500" 
             />
 
-            {/* CAMPO DE DATA DA PARTIDA (OPCIONAL) */}
             <div className="flex flex-col justify-center bg-gray-950 px-4 py-2 rounded-lg border border-gray-700 focus-within:border-blue-500">
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Data do Jogo (Opcional)</span>
               <input 
@@ -253,7 +262,8 @@ export default function AbaLiveMatch({
                 {emCampo.map(sq => {
                   const player = players.find(p => p.id === sq.id);
                   const isExpanded = expandedLivePlayers.includes(sq.id);
-                  const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+                  const playerAcoes = (player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA).filter(a => a.id !== 'partidas');
+                  const categoriasAgrupadas = groupActionsByCategory(playerAcoes);
 
                   return (
                     <div key={sq.id} className="bg-gray-900 rounded-xl border border-gray-800 shadow-lg relative overflow-hidden h-fit transition-all">
@@ -302,22 +312,31 @@ export default function AbaLiveMatch({
                             🔄 Substituir Atleta
                           </button>
                           
-                          <div className="grid grid-cols-1 gap-1.5">
-                            {playerAcoes.filter(a => a.id !== 'partidas').map(acao => (
-                              <div key={acao.id} className={`flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas_dificeis', 'gols_sofridos'].includes(acao.id) ? 'border-l-2 border-l-blue-500/30' : ''}`}>
-                                <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
-                                {acao.id === 'minutos' ? (
-                                  <input type="number" min="0" placeholder="0" disabled={isActionDisabled} value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className={`w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500 ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`} />
-                                ) : (
-                                  <div className="flex space-x-1 items-center">
-                                    <button disabled={isActionDisabled} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className={`bg-gray-800 text-gray-400 w-7 h-7 rounded flex items-center justify-center font-bold transition ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-900/50'}`}>-</button>
-                                    <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
-                                    <button disabled={isActionDisabled} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className={`bg-gray-800 text-gray-400 w-7 h-7 rounded flex items-center justify-center font-bold transition ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-900/50'}`}>+</button>
-                                  </div>
-                                )}
+                          {/* SUB-MENUS DE AÇÕES EM CAMPO */}
+                          <div className="space-y-3">
+                            {Object.keys(categoriasAgrupadas).map(catName => (
+                              <div key={catName} className="bg-gray-950/60 p-2 rounded-lg border border-gray-800">
+                                <h5 className="text-[10px] uppercase font-black text-blue-400 mb-1.5 tracking-widest border-b border-gray-800/80 pb-1">{catName}</h5>
+                                <div className="grid grid-cols-1 gap-1.5">
+                                  {categoriasAgrupadas[catName].map(acao => (
+                                    <div key={acao.id} className={`flex justify-between items-center bg-gray-900 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas_dificeis', 'gols_sofridos'].includes(acao.id) ? 'border-l-2 border-l-blue-500/50' : ''}`}>
+                                      <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
+                                      {acao.id === 'minutos' ? (
+                                        <input type="number" min="0" placeholder="0" disabled={isActionDisabled} value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className={`w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500 ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                                      ) : (
+                                        <div className="flex space-x-1 items-center">
+                                          <button disabled={isActionDisabled} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className={`bg-gray-800 text-gray-400 w-7 h-7 rounded flex items-center justify-center font-bold transition ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-900/50'}`}>-</button>
+                                          <span className="font-mono w-6 text-center text-blue-400 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
+                                          <button disabled={isActionDisabled} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className={`bg-gray-800 text-gray-400 w-7 h-7 rounded flex items-center justify-center font-bold transition ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-900/50'}`}>+</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             ))}
                           </div>
+
                         </div>
                       )}
                     </div>
@@ -336,7 +355,8 @@ export default function AbaLiveMatch({
                   {noBanco.map(sq => {
                     const player = players.find(p => p.id === sq.id);
                     const isExpanded = expandedLivePlayers.includes(sq.id);
-                    const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+                    const playerAcoes = (player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA).filter(a => a.id !== 'partidas');
+                    const categoriasAgrupadas = groupActionsByCategory(playerAcoes);
 
                     return (
                       <div key={sq.id} className="bg-gray-900/80 rounded-xl border border-gray-800/50 shadow relative overflow-hidden h-fit transition-all">
@@ -358,19 +378,26 @@ export default function AbaLiveMatch({
                         {isExpanded && (
                           <div className="p-3 border-t border-gray-800/50 bg-gray-900/30">
                             <p className="text-[10px] text-orange-500 font-bold mb-3 text-center bg-orange-950/20 p-1 rounded">🚫 Ações bloqueadas enquanto estiver no banco.</p>
-                            <div className="grid grid-cols-1 gap-1.5 opacity-50">
-                              {playerAcoes.filter(a => a.id !== 'partidas').map(acao => (
-                                <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
-                                  <span className="text-xs text-gray-500 truncate pr-2">{acao.nome}</span>
-                                  {acao.id === 'minutos' ? (
-                                    <input type="number" min="0" placeholder="0" disabled={true} value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-gray-500 font-bold text-sm rounded border border-gray-700 outline-none cursor-not-allowed" />
-                                  ) : (
-                                    <div className="flex space-x-1 items-center">
-                                      <button disabled={true} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold cursor-not-allowed">-</button>
-                                      <span className="font-mono w-6 text-center text-gray-500 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
-                                      <button disabled={true} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold cursor-not-allowed">+</button>
-                                    </div>
-                                  )}
+                            <div className="space-y-3 opacity-50">
+                              {Object.keys(categoriasAgrupadas).map(catName => (
+                                <div key={catName} className="bg-gray-950/40 p-2 rounded-lg border border-gray-800/50">
+                                  <h5 className="text-[10px] uppercase font-black text-gray-500 mb-1.5 tracking-widest border-b border-gray-800/50 pb-1">{catName}</h5>
+                                  <div className="grid grid-cols-1 gap-1.5">
+                                    {categoriasAgrupadas[catName].map(acao => (
+                                      <div key={acao.id} className="flex justify-between items-center bg-gray-950 px-2 py-1.5 rounded border border-gray-800/50">
+                                        <span className="text-xs text-gray-500 truncate pr-2">{acao.nome}</span>
+                                        {acao.id === 'minutos' ? (
+                                          <input type="number" min="0" placeholder="0" disabled={true} value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className="w-16 p-1 text-center bg-gray-800 text-gray-500 font-bold text-sm rounded border border-gray-700 outline-none cursor-not-allowed" />
+                                        ) : (
+                                          <div className="flex space-x-1 items-center">
+                                            <button disabled={true} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold cursor-not-allowed">-</button>
+                                            <span className="font-mono w-6 text-center text-gray-500 font-bold text-sm">{matchStats[sq.id]?.[acao.id] || 0}</span>
+                                            <button disabled={true} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, 1); }} className="bg-gray-900 text-gray-600 w-7 h-7 rounded flex items-center justify-center font-bold cursor-not-allowed">+</button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               ))}
                             </div>

@@ -18,26 +18,51 @@ export const SETORES = {
 };
 
 export const ACOES_LINHA = [
-  { id: 'partidas', nome: 'Partidas' }, { id: 'minutos', nome: 'Minutos Jogados' },
-  { id: 'gols', nome: 'Golos' }, { id: 'assistencias', nome: 'Assistências' },
-  { id: 'finalizacoes_certas', nome: 'Fin. Certas' }, 
-  { id: 'finalizacoes_erradas', nome: 'Fin. Erradas' }, 
-  { id: 'passes_chave', nome: 'Passes Chave' },
-  { id: 'cruzamentos', nome: 'Cruzamentos' }, { id: 'desarmes', nome: 'Desarmes' },
-  { id: 'duelos_aereos', nome: 'Duelos Aéreos' }, { id: 'progressoes', nome: 'Progressões' },
-  { id: 'perdas_posse', nome: 'Perdas de Posse' }, { id: 'cartoes_amarelos', nome: 'Cartões Amarelos' },
-  { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos' }
+  // Geral / Físico
+  { id: 'partidas', nome: 'Partidas', categoria: 'Geral' }, 
+  { id: 'minutos', nome: 'Minutos Jogados', categoria: 'Geral' },
+  { id: 'progressoes', nome: 'Progressões', categoria: 'Geral' },
+
+  // Finalizações
+  { id: 'finalizacoes_certas', nome: 'Fin. Certas', categoria: 'Finalizações' }, 
+  { id: 'finalizacoes_erradas', nome: 'Fin. Erradas', categoria: 'Finalizações' }, 
+  { id: 'gols', nome: 'Golos', categoria: 'Finalizações' },
+
+  // Passes
+  { id: 'cruzamentos', nome: 'Cruzamentos', categoria: 'Passes' },
+  { id: 'passes_chave', nome: 'Passes Chave', categoria: 'Passes' },
+  { id: 'passes_frente', nome: 'Passes p/ Frente', categoria: 'Passes' },
+  { id: 'assistencias', nome: 'Assistências', categoria: 'Passes' },
+
+  // Defensivo
+  { id: 'desarmes', nome: 'Desarmes', categoria: 'Defensivo' },
+  { id: 'duelos_aereos', nome: 'Duelos Aéreos', categoria: 'Defensivo' },
+  { id: 'bloqueios', nome: 'Bloqueios', categoria: 'Defensivo' },
+
+  // Disciplinares
+  { id: 'cartoes_amarelos', nome: 'Cartões Amarelos', categoria: 'Disciplinares' },
+  { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos', categoria: 'Disciplinares' },
+  { id: 'faltas_cometidas', nome: 'Faltas Cometidas', categoria: 'Disciplinares' },
+
+  // Erros
+  { id: 'perdas_posse', nome: 'Perdas de Posse', categoria: 'Erros' },
+  { id: 'erro_passe', nome: 'Erro de Passe', categoria: 'Erros' }
 ];
 
 export const ACOES_GOLEIRO = [
-  { id: 'partidas', nome: 'Partidas' }, { id: 'minutos', nome: 'Minutos Jogados' },
-  { id: 'defesas', nome: 'Defesas' }, { id: 'defesas_dificeis', nome: 'Defesas difíceis' },
-  { id: 'saida_meta', nome: 'Saída de meta' }, { id: 'confrontos', nome: 'Confrontos' },
-  { id: 'tiros_meta', nome: 'Tiros de meta' }, { id: 'acoes_pes', nome: 'Ações com os pés' },
-  { id: 'cartoes_amarelos', nome: 'Cartões Amarelos' }, { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos' },
-  { id: 'gols_sofridos', nome: 'Gols Sofridos' }
+  { id: 'partidas', nome: 'Partidas', categoria: 'Geral' }, 
+  { id: 'minutos', nome: 'Minutos Jogados', categoria: 'Geral' },
+  { id: 'defesas', nome: 'Defesas', categoria: 'Guarda-Redes' }, 
+  { id: 'defesas_dificeis', nome: 'Defesas difíceis', categoria: 'Guarda-Redes' },
+  { id: 'saida_meta', nome: 'Saída de meta', categoria: 'Guarda-Redes' }, 
+  { id: 'confrontos', nome: 'Confrontos', categoria: 'Guarda-Redes' },
+  { id: 'gols_sofridos', nome: 'Golos Sofridos', categoria: 'Guarda-Redes' },
+  { id: 'tiros_meta', nome: 'Tiros de meta', categoria: 'Distribuição' }, 
+  { id: 'acoes_pes', nome: 'Ações com os pés', categoria: 'Distribuição' },
+  { id: 'cartoes_amarelos', nome: 'Cartões Amarelos', categoria: 'Disciplinares' }, 
+  { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos', categoria: 'Disciplinares' },
+  { id: 'faltas_cometidas', nome: 'Faltas Cometidas', categoria: 'Disciplinares' }
 ];
-
 export const TODAS_ACOES = [...new Map([...ACOES_LINHA, ...ACOES_GOLEIRO].map(item => [item.id, item])).values()];
 
 export const isDateInRange = (dateString, startDate, endDate) => {
