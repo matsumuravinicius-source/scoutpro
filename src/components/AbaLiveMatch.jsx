@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 
 export default function AbaLiveMatch({
   isMatchActive, matchTitle, setMatchTitle, 
-  matchCompetition, setMatchCompetition, competitions, // AGORA É A LISTA DA BASE DE DADOS
+  matchDate, setMatchDate, // NOVOS PROPS DE DATA
+  matchCompetition, setMatchCompetition, competitions,
   matchTeam, setMatchTeam, 
   matchCategory, setMatchCategory,
   matchSquad, setMatchSquad,
@@ -77,10 +78,9 @@ export default function AbaLiveMatch({
       {!isMatchActive ? (
         <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-          <p className="text-gray-400 mb-6">Defina a competição, título do jogo e a lista de convocados.</p>
+          <p className="text-gray-400 mb-6">Defina a competição, título do jogo, data (opcional para registo retroativo) e a lista de convocados.</p>
           
           <div className="flex flex-col md:flex-row gap-4 mb-4">
-            {/* NOVO: SELECT DIRETO DA BASE DE DADOS */}
             <select 
               required 
               value={matchCompetition} 
@@ -99,6 +99,18 @@ export default function AbaLiveMatch({
               onChange={e => setMatchTitle(e.target.value)} 
               className="flex-[2] p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500" 
             />
+
+            {/* CAMPO DE DATA DA PARTIDA (OPCIONAL) */}
+            <div className="flex flex-col justify-center bg-gray-950 px-4 py-2 rounded-lg border border-gray-700 focus-within:border-blue-500">
+              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Data do Jogo (Opcional)</span>
+              <input 
+                type="date" 
+                value={matchDate} 
+                onChange={e => setMatchDate(e.target.value)} 
+                className="bg-transparent text-blue-400 font-bold outline-none text-sm cursor-pointer"
+                title="Se deixar em branco, usará a data e hora de hoje"
+              />
+            </div>
           </div>
           
           <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -154,6 +166,11 @@ export default function AbaLiveMatch({
                 <div>
                   <div className="text-[10px] text-gray-400 tracking-normal">{matchCompetition}</div>
                   <div>{matchTitle}</div>
+                  {matchDate && (
+                    <div className="text-[10px] text-blue-400 font-mono mt-0.5">
+                      📅 {matchDate.split('-').reverse().join('/')}
+                    </div>
+                  )}
                 </div>
               </h2>
               <div className="text-gray-400 font-bold mb-1">{currentPeriod > 4 ? 'Fim de Jogo' : `${currentPeriod}º Tempo`}</div>
@@ -265,7 +282,7 @@ export default function AbaLiveMatch({
                             <option value="">Escolha o reserva...</option>
                             {noBanco.map(s => {
                               const p = players.find(x => x.id === s.id);
-                              return <option key={s.id} value={s.id}>Nº {s.numero} - {p.nome} ({p.setor})</option>
+                              return <option key={s.id} value={s.id}>Nº {s.numero} - {p.nome} ({p.setor})</option>;
                             })}
                           </select>
                           <button onClick={() => setSubPlayerOut(null)} className="w-full py-2 text-xs text-gray-400 font-bold bg-gray-800 rounded hover:bg-gray-700 transition">Cancelar Substituição</button>
