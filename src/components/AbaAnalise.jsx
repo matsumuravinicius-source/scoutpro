@@ -109,7 +109,6 @@ export default function AbaAnalise({
             </h3>
             <p className="text-sm text-gray-400 mb-6">
               {selectedMetricObj ? (
-                // O "?" de proteção (optional chaining) que evita a Tela Branca!
                 <>Fórmula: <strong className="text-blue-400">{TODAS_ACOES?.find(a => a.id === selectedMetricObj.numerador)?.nome || selectedMetricObj.numerador}</strong> a dividir por <strong className="text-orange-400">{TODAS_ACOES?.find(a => a.id === selectedMetricObj.denominador)?.nome || selectedMetricObj.denominador}</strong></>
               ) : 'Selecione uma métrica na aba ao lado ou crie uma nova para visualizar os dados cruzados.'}
             </p>
@@ -121,20 +120,25 @@ export default function AbaAnalise({
                     <th className="p-3">Pos.</th>
                     <th className="p-3">Atleta</th>
                     <th className="p-3">Clube</th>
+                    {/* NOVA COLUNA: Valores das Ações */}
+                    <th className="p-3 text-center">Valores (X / Y)</th>
                     <th className="p-3 text-right text-green-400 font-bold">Índice Alcançado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!selectedMetricObj ? (
-                    <tr><td colSpan="4" className="p-8 text-center text-gray-600 font-bold border border-gray-800 border-dashed rounded-lg mt-4">Pronto para processar dados.</td></tr>
+                    <tr><td colSpan="5" className="p-8 text-center text-gray-600 font-bold border border-gray-800 border-dashed rounded-lg mt-4">Pronto para processar dados.</td></tr>
                   ) : analyzedPlayers.length === 0 ? (
-                    <tr><td colSpan="4" className="p-8 text-center text-gray-500">Nenhum atleta encontrado com as estatísticas desta fórmula ou filtros aplicados.</td></tr>
+                    <tr><td colSpan="5" className="p-8 text-center text-gray-500">Nenhum atleta encontrado com as estatísticas desta fórmula ou filtros aplicados.</td></tr>
                   ) : (
                     analyzedPlayers.map((player, index) => {
                       const result = calculateCustomMetric(player, selectedMetricObj);
-                      // Se o resultado for 0, não poluimos a tabela (apenas mostramos quem tem estatística)
                       if (result === 0 || result === "0.000") return null; 
                       
+                      // Extração dos valores absolutos do numerador e denominador para o atleta
+                      const numVal = player.acoes_calc ? (parseFloat(player.acoes_calc[selectedMetricObj.numerador]) || 0) : 0;
+                      const denVal = player.acoes_calc ? (parseFloat(player.acoes_calc[selectedMetricObj.denominador]) || 0) : 0;
+
                       return (
                         <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition">
                           <td className="p-3 text-gray-500 font-mono font-bold">#{index + 1}</td>
@@ -143,6 +147,12 @@ export default function AbaAnalise({
                             <span className="text-[10px] text-gray-500 block mt-1 uppercase tracking-wider">{player.setor}</span>
                           </td>
                           <td className="p-3 text-gray-400 text-sm">{player.time_nome}</td>
+                          
+                          {/* NOVA CÉLULA: Exibe Valor Numerador / Valor Denominador com as cores correspondentes */}
+                          <td className="p-3 text-center font-mono text-gray-300">
+                            <span className="text-blue-400 font-bold">{numVal}</span> <span className="text-gray-600 mx-1">/</span> <span className="text-orange-400 font-bold">{denVal}</span>
+                          </td>
+                          
                           <td className="p-3 text-right font-mono text-green-400 font-bold text-lg">{result}</td>
                         </tr>
                       );
