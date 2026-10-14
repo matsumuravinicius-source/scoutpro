@@ -1,83 +1,160 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-export default function AbaAnalise({ FilterComponent, TODAS_ACOES, playersWithCalculatedStats, safeMatchHistory, teams, startD, endD, isMatchInDateRange }) {
-  const [modoAnalise, setModoAnalise] = useState('individual'); // 'individual' ou 'coletivo'
-  const [metricConfig, setMetricConfig] = useState({ nome: '', numerador: '', denominador: '' });
+export default function AbaAnalise({
+  FilterComponent, handleSaveCustomMetric, novaMetrica, setNovaMetrica,
+  TODAS_ACOES, savedMetrics, selectedMetricId, setSelectedMetricId,
+  handleDeleteCustomMetric, getAnalyzedPlayers, calculateCustomMetric
+}) {
   
-  // Função que soma os totais de uma equipa nas partidas do período filtrado
-  const getTeamStats = (teamName) => {
-    const teamMatches = safeMatchHistory.filter(m => isMatchInDateRange(m.criado_em, startD, endD) && m.dados?._meta?.equipes?.includes(teamName));
-    const computed = {};
-    TODAS_ACOES.forEach(a => computed[a.id] = 0);
-    
-    teamMatches.forEach(m => {
-      Object.keys(m.dados).forEach(pId => {
-        if (pId !== '_meta' && playersWithCalculatedStats.find(p => p.id === pId)?.time_nome === teamName) {
-          const st = m.dados[pId];
-          Object.keys(st).forEach(k => { computed[k] = (computed[k] || 0) + (parseInt(st[k]) || 0); });
-        }
-      });
-    });
-    return computed;
-  };
-
-  const calculateMetric = (acoesObj) => {
-    if (!metricConfig.numerador || !metricConfig.denominador) return 0;
-    const num = parseFloat(acoesObj[metricConfig.numerador]) || 0;
-    const den = parseFloat(acoesObj[metricConfig.denominador]) || 0;
-    return den === 0 ? 0 : (num / den).toFixed(3);
-  };
+  const analyzedPlayers = getAnalyzedPlayers() || [];
+  const selectedMetricObj = savedMetrics?.find(m => m.id === selectedMetricId);
 
   return (
     <div className="space-y-6">
       {FilterComponent}
-      
-      {/* SELETORES DE MODO DE ANÁLISE */}
-      <div className="flex bg-gray-900 p-1 rounded-lg border border-gray-800 w-fit">
-        <button onClick={() => setModoAnalise('individual')} className={`px-6 py-2 rounded-md font-bold text-sm transition ${modoAnalise === 'individual' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>👤 Estatística Individual</button>
-        <button onClick={() => setModoAnalise('coletivo')} className={`px-6 py-2 rounded-md font-bold text-sm transition ${modoAnalise === 'coletivo' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>🛡️ Estatística Coletiva (Clubes)</button>
-      </div>
 
-      <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-        <h2 className="text-xl font-bold mb-4">Montar Fórmula de Análise</h2>
-        <div className="flex items-center gap-2 w-full">
-          <select value={metricConfig.numerador} onChange={e => setMetricConfig({...metricConfig, numerador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none flex-1"><option value="">Numerador (X)...</option>{TODAS_ACOES.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select>
-          <span className="font-black text-xl text-gray-600">÷</span>
-          <select value={metricConfig.denominador} onChange={e => setMetricConfig({...metricConfig, denominador: e.target.value})} className="p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none flex-1"><option value="">Denominador (Y)...</option>{TODAS_ACOES.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select>
-        </div>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* === LADO ESQUERDO: SELEÇÃO E CRIAÇÃO DE MÉTRICAS === */}
+        <div className="lg:col-span-1 space-y-6">
+          
+          {/* SELEÇÃO RÁPIDA (Métricas Guardadas) */}
+          <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
+            <h3 className="text-xl font-bold mb-4 text-blue-400">⚡ Seleção Rápida</h3>
+            {savedMetrics && savedMetrics.length > 0 ? (
+              <div className="space-y-3">
+                <select 
+                  value={selectedMetricId || ''} 
+                  onChange={(e) => setSelectedMetricId(e.target.value)}
+                  className="w-full p-3 bg-gray-950 border border-gray-700 rounded-lg text-white outline-none focus:border-blue-500 font-bold"
+                >
+                  <option value="" disabled>Escolha uma métrica...</option>
+                  {savedMetrics.map(m => (
+                    <option key={m.id} value={m.id}>{m.nome}</option>
+                  ))}
+                </select>
+                
+                {selectedMetricId && (
+                  <button 
+                    onClick={() => handleDeleteCustomMetric(selectedMetricId)}
+                    className="w-full py-2 bg-red-900/20 text-red-500 hover:bg-red-500 hover:text-white font-bold rounded-lg transition text-sm"
+                  >
+                    🗑️ Remover Métrica Atual
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Nenhuma métrica salva ainda. Crie a primeira abaixo!</p>
+            )}
+          </div>
 
-      {metricConfig.numerador && metricConfig.denominador && (
-        <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead><tr className="border-b border-gray-800 text-gray-400 text-sm"><th className="p-3">Pos.</th><th className="p-3">{modoAnalise === 'individual' ? 'Atleta' : 'Clube'}</th><th className="p-3 text-right">Fórmula ({metricConfig.numerador}/{metricConfig.denominador})</th><th className="p-3 text-right font-black text-blue-400">Índice</th></tr></thead>
-            <tbody>
-              {modoAnalise === 'individual' ? (
-                playersWithCalculatedStats.sort((a, b) => calculateMetric(b.acoes_calc) - calculateMetric(a.acoes_calc)).map((player, idx) => (
-                  <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
-                    <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
-                    <td className="p-3 font-bold">{player.nome} <span className="text-xs text-gray-500 block">{player.time_nome}</span></td>
-                    <td className="p-3 text-right text-xs font-mono text-gray-500">{(player.acoes_calc[metricConfig.numerador] || 0)} / {(player.acoes_calc[metricConfig.denominador] || 0)}</td>
-                    <td className="p-3 text-right font-mono text-xl text-green-400 font-bold">{calculateMetric(player.acoes_calc)}</td>
-                  </tr>
-                ))
-              ) : (
-                teams.map(teamName => {
-                  const stats = getTeamStats(teamName);
-                  return { name: teamName, stats: stats, score: calculateMetric(stats) };
-                }).sort((a, b) => b.score - a.score).map((team, idx) => (
-                  <tr key={team.name} className="border-b border-gray-800/50 hover:bg-gray-800/20">
-                    <td className="p-3 font-mono text-gray-500">{idx + 1}</td>
-                    <td className="p-3 font-bold">{team.name}</td>
-                    <td className="p-3 text-right text-xs font-mono text-gray-500">{(team.stats[metricConfig.numerador] || 0)} / {(team.stats[metricConfig.denominador] || 0)}</td>
-                    <td className="p-3 text-right font-mono text-xl text-blue-400 font-bold">{team.score}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          {/* CRIAR NOVA MÉTRICA */}
+          <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
+            <h3 className="text-xl font-bold mb-4 text-green-400">🛠️ Cruzamento de Dados</h3>
+            <form onSubmit={handleSaveCustomMetric} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome da Fórmula</label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="Ex: Eficácia de Remate"
+                  value={novaMetrica?.nome || ''} 
+                  onChange={e => setNovaMetrica(prev => ({...prev, nome: e.target.value}))} 
+                  className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 outline-none text-sm focus:border-green-500 text-white font-bold" 
+                />
+              </div>
+              
+              <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 flex flex-col gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Numerador (Dividir isto...)</label>
+                  <select 
+                    required 
+                    value={novaMetrica?.numerador || ''} 
+                    onChange={e => setNovaMetrica(prev => ({...prev, numerador: e.target.value}))} 
+                    className="w-full p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none focus:border-green-500 text-blue-300"
+                  >
+                    <option value="">Selecione...</option>
+                    {TODAS_ACOES?.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                  </select>
+                </div>
+                
+                <div className="text-center text-gray-600 font-black text-xl my-1">÷</div>
+                
+                <div>
+                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1">Denominador (...por isto)</label>
+                  <select 
+                    required 
+                    value={novaMetrica?.denominador || ''} 
+                    onChange={e => setNovaMetrica(prev => ({...prev, denominador: e.target.value}))} 
+                    className="w-full p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none focus:border-green-500 text-orange-300"
+                  >
+                    <option value="">Selecione...</option>
+                    {TODAS_ACOES?.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-lg transition shadow-lg shadow-green-900/20">
+                Salvar e Analisar
+              </button>
+            </form>
+          </div>
         </div>
-      )}
+
+        {/* === LADO DIREITO: TABELA DE RESULTADOS === */}
+        <div className="lg:col-span-2">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 shadow-xl h-full">
+            <h3 className="text-xl font-bold mb-2">
+              {selectedMetricObj ? `Tabela de Análise: ${selectedMetricObj.nome}` : 'Aguardando Seleção...'}
+            </h3>
+            <p className="text-sm text-gray-400 mb-6">
+              {selectedMetricObj ? (
+                // O "?" de proteção (optional chaining) que evita a Tela Branca!
+                <>Fórmula: <strong className="text-blue-400">{TODAS_ACOES?.find(a => a.id === selectedMetricObj.numerador)?.nome || selectedMetricObj.numerador}</strong> a dividir por <strong className="text-orange-400">{TODAS_ACOES?.find(a => a.id === selectedMetricObj.denominador)?.nome || selectedMetricObj.denominador}</strong></>
+              ) : 'Selecione uma métrica na aba ao lado ou crie uma nova para visualizar os dados cruzados.'}
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-max">
+                <thead>
+                  <tr className="border-b border-gray-800 text-gray-400 text-sm">
+                    <th className="p-3">Pos.</th>
+                    <th className="p-3">Atleta</th>
+                    <th className="p-3">Clube</th>
+                    <th className="p-3 text-right text-green-400 font-bold">Índice Alcançado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!selectedMetricObj ? (
+                    <tr><td colSpan="4" className="p-8 text-center text-gray-600 font-bold border border-gray-800 border-dashed rounded-lg mt-4">Pronto para processar dados.</td></tr>
+                  ) : analyzedPlayers.length === 0 ? (
+                    <tr><td colSpan="4" className="p-8 text-center text-gray-500">Nenhum atleta encontrado com as estatísticas desta fórmula ou filtros aplicados.</td></tr>
+                  ) : (
+                    analyzedPlayers.map((player, index) => {
+                      const result = calculateCustomMetric(player, selectedMetricObj);
+                      // Se o resultado for 0, não poluimos a tabela (apenas mostramos quem tem estatística)
+                      if (result === 0 || result === "0.000") return null; 
+                      
+                      return (
+                        <tr key={player.id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition">
+                          <td className="p-3 text-gray-500 font-mono font-bold">#{index + 1}</td>
+                          <td className="p-3 font-bold">
+                            {player.nome} 
+                            <span className="text-[10px] text-gray-500 block mt-1 uppercase tracking-wider">{player.setor}</span>
+                          </td>
+                          <td className="p-3 text-gray-400 text-sm">{player.time_nome}</td>
+                          <td className="p-3 text-right font-mono text-green-400 font-bold text-lg">{result}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
