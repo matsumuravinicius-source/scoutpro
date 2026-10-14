@@ -41,7 +41,6 @@ export const ACOES_GOLEIRO = [
 
 export const TODAS_ACOES = [...new Map([...ACOES_LINHA, ...ACOES_GOLEIRO].map(item => [item.id, item])).values()];
 
-// === NOVA FUNÇÃO DE FILTRAGEM POR DATA ===
 export const isDateInRange = (dateString, startDate, endDate) => {
   if (!startDate && !endDate) return true;
   const matchDate = new Date(dateString);
@@ -79,7 +78,6 @@ export default function App() {
   const [matchCompetition, setMatchCompetition] = useState(''); 
   const [filterMatchCompetition, setFilterMatchCompetition] = useState(''); 
   
-  // === NOVOS ESTADOS DE DATA (Substituem os Anos) ===
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
 
@@ -91,7 +89,6 @@ export default function App() {
 
   const [startDateB, setStartDateB] = useState('');
   const [endDateB, setEndDateB] = useState('');
-  // ===============================================
 
   const [matchTeam, setMatchTeam] = useState('');
   const [matchCategory, setMatchCategory] = useState(''); 
@@ -149,7 +146,6 @@ export default function App() {
     return true;
   });
 
-  // Atualizado para usar Intervalo de Datas
   const filteredPlayersA = safePlayers.filter(p => {
     if (filterTeamA && p.time_nome !== filterTeamA) return false;
     if (filterCategoryA && p.categoria !== filterCategoryA) return false;
@@ -166,7 +162,6 @@ export default function App() {
     return true;
   });
 
-  // Motor Atualizado para calcular estats na Janela de Tempo
   const getComputedStats = (player, startDate, endDate) => {
     if (!startDate && !endDate) return player.acoes; 
     const playerMatches = safeMatchHistory.filter(m => {
@@ -185,7 +180,6 @@ export default function App() {
     return computed;
   };
 
-  // Os jogadores exibidos adaptam-se magicamente à data escolhida!
   const playersWithCalculatedStats = displayedPlayers.map(p => ({
     ...p,
     acoes_calc: getComputedStats(p, globalStartDate, globalEndDate),
@@ -262,19 +256,36 @@ export default function App() {
     e.preventDefault();
     const funcoesLimpas = novoJogador.funcoes.filter(f => f.trim() !== '');
     if(funcoesLimpas.length === 0) return alert("Selecione pelo menos uma função.");
+    
     const payload = {
       nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', 
       setor: novoJogador.setor, funcoes: funcoesLimpas, pe_dominante: novoJogador.pe_dominante,
       altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null,
     };
+
     if (editingPlayerId) {
       const { data, error } = await supabase.from('jogadores').update(payload).eq('id', editingPlayerId).select();
-      if (!error && data) { setPlayers(safePlayers.map(p => p.id === editingPlayerId ? { ...p, ...payload } : p)); cancelarEdicao(); }
+      if (error) {
+        alert("Erro ao atualizar jogador: " + error.message);
+      } else if (data) { 
+        setPlayers(safePlayers.map(p => p.id === editingPlayerId ? { ...p, ...payload } : p)); 
+        cancelarEdicao(); 
+        alert("✅ Jogador atualizado com sucesso!");
+      }
     } else {
-      const acoesIniciais = {}; const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
-      listaBase.forEach(a => acoesIniciais[a.id] = 0); payload.acoes = acoesIniciais;
+      const acoesIniciais = {}; 
+      const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+      listaBase.forEach(a => acoesIniciais[a.id] = 0); 
+      payload.acoes = acoesIniciais;
+      
       const { data, error } = await supabase.from('jogadores').insert([payload]).select();
-      if (!error && data) { setPlayers([...safePlayers, data[0]]); cancelarEdicao(); }
+      if (error) {
+        alert("Erro ao adicionar jogador: " + error.message);
+      } else if (data) { 
+        setPlayers([...safePlayers, data[0]]); 
+        cancelarEdicao(); 
+        alert("✅ Jogador adicionado com sucesso!");
+      }
     }
   };
 
@@ -461,7 +472,6 @@ export default function App() {
   const getRankedPlayers = () => [...playersWithCalculatedStats].sort((a, b) => (b.acoes_calc[rankMetric]||0) - (a.acoes_calc[rankMetric]||0));
   const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
-  // === NOVO DESIGN DO FILTRO COM INTERVALO DE DATAS ===
   const renderGlobalFilters = (showDate = false) => (
     <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-900 p-4 rounded-xl border border-gray-800 items-center">
       <div className="flex items-center gap-2 text-gray-400 font-bold mr-2 whitespace-nowrap">🔎 Filtros:</div>
@@ -499,10 +509,8 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {/* Passamos isDateInRange para a AbaClubes */}
         {activeTab === 'clubes' && <AbaClubes teams={teams} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} />}
         
-        {/* Aba Base de Dados AGORA com o Filtro de Data ativado (true) */}
         {activeTab === 'scout' && <AbaBaseDados novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={renderGlobalFilters(true)} displayedPlayers={playersWithCalculatedStats} toggleExpandPlayer={toggleExpandPlayer} handleEditClick={handleEditClick} handleDeletePlayer={handleDeletePlayer} getIdade={getIdade} expandedPlayers={expandedPlayers} SETORES={SETORES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetGlobalAction={handleSetGlobalAction} handleUpdateGlobalActions={handleUpdateGlobalActions} competitions={competitions} newCompetitionName={newCompetitionName} setNewCompetitionName={setNewCompetitionName} handleAddCompetition={handleAddCompetition} />}
         
         {activeTab === 'live' && <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} matchTeam={matchTeam} setMatchTeam={setMatchTeam} matchCategory={matchCategory} setMatchCategory={setMatchCategory} matchSquad={matchSquad} setMatchSquad={setMatchSquad} handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} teams={teams} players={safePlayers} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />}
@@ -513,7 +521,18 @@ export default function App() {
         
         {activeTab === 'leaderboard' && <AbaRanking FilterComponent={renderGlobalFilters(true)} rankMetric={rankMetric} setRankMetric={setRankMetric} TODAS_ACOES={TODAS_ACOES} getRankedPlayers={getRankedPlayers} />}
         
-        {activeTab === 'comparativo' && <AbaComparativo startDateA={startDateA} setStartDateA={setStartDateA} endDateA={endDateA} setEndDateA={setEndDateA} filterTeamA={filterTeamA} setFilterTeamA={setFilterTeamA} teams={teams} filterCategoryA={filterCategoryA} setFilterCategoryA={setFilterCategoryA} uniqueCategories={uniqueCategories} filterSectorA={filterSectorA} setFilterSectorA={setFilterSectorA} SETORES={SETORES} compareA={compareA} setCompareA={setCompareA} filteredPlayersA={filteredPlayersA} startDateB={startDateB} setStartDateB={setStartDateB} endDateB={endDateB} setEndDateB={setEndDateB} filterTeamB={filterTeamB} setFilterTeamB={setFilterTeamB} filterCategoryB={filterCategoryB} setFilterCategoryB={setFilterCategoryB} filterSectorB={filterSectorB} setFilterSectorB={setFilterSectorB} compareB={compareB} setCompareB={setCompareB} filteredPlayersB={filteredPlayersB} TODAS_ACOES={TODAS_ACOES} players={safePlayers} getComputedStats={getComputedStats} />}
+        {activeTab === 'comparativo' && <AbaComparativo 
+          startDateA={startDateA} setStartDateA={setStartDateA} endDateA={endDateA} setEndDateA={setEndDateA} 
+          filterTeamA={filterTeamA} setFilterTeamA={setFilterTeamA} teams={teams} 
+          filterCategoryA={filterCategoryA} setFilterCategoryA={setFilterCategoryA} uniqueCategories={uniqueCategories} 
+          filterSectorA={filterSectorA} setFilterSectorA={setFilterSectorA} SETORES={SETORES} 
+          compareA={compareA} setCompareA={setCompareA} filteredPlayersA={filteredPlayersA} 
+          startDateB={startDateB} setStartDateB={setStartDateB} endDateB={endDateB} setEndDateB={setEndDateB} 
+          filterTeamB={filterTeamB} setFilterTeamB={setFilterTeamB} filterCategoryB={filterCategoryB} setFilterCategoryB={setFilterCategoryB} 
+          filterSectorB={filterSectorB} setFilterSectorB={setFilterSectorB} compareB={compareB} setCompareB={setCompareB} filteredPlayersB={filteredPlayersB} 
+          TODAS_ACOES={TODAS_ACOES} players={safePlayers} getComputedStats={getComputedStats} 
+          matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange}
+        />}
       </main>
     </div>
   );
