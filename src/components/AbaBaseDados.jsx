@@ -5,10 +5,9 @@ export default function AbaBaseDados({
   cancelarEdicao, FilterComponent, displayedPlayers, toggleExpandPlayer,
   handleEditClick, handleDeletePlayer, expandedPlayers,
   SETORES, ACOES_LINHA, ACOES_GOLEIRO, handleSetGlobalAction, handleUpdateGlobalActions,
-  competitions, newCompetitionName, setNewCompetitionName, handleAddCompetition 
+  competitions, newCompetitionName, setNewCompetitionName, handleAddCompetition, handleDeleteCompetition 
 }) {
 
-  // Função para agrupar ações com proteção caso a categoria não exista
   const groupActionsByCategory = (acoesArray) => {
     return acoesArray.reduce((acc, acao) => {
       const catName = acao.categoria || 'Estatísticas Globais';
@@ -120,22 +119,37 @@ export default function AbaBaseDados({
           </form>
         </div>
 
-        {/* Formulário de Competição */}
+        {/* Gestão de Competições */}
         <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-          <h2 className="text-lg font-bold mb-4">🏆 Nova Competição</h2>
-          <form onSubmit={handleAddCompetition} className="space-y-3">
+          <h2 className="text-lg font-bold mb-4">🏆 Competições</h2>
+          <form onSubmit={handleAddCompetition} className="space-y-3 mb-4">
             <div>
-              <input type="text" placeholder="Nome da Competição (Ex: Brasileirão)" required value={newCompetitionName} onChange={e => setNewCompetitionName(e.target.value)} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 outline-none text-sm focus:border-blue-500" />
+              <input type="text" placeholder="Nova Competição (Ex: Brasileirão)" required value={newCompetitionName} onChange={e => setNewCompetitionName(e.target.value)} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 outline-none text-sm focus:border-blue-500" />
             </div>
             <button type="submit" className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-blue-400 font-bold rounded-lg transition border border-gray-700">
               Adicionar Competição
             </button>
           </form>
+
+          {/* LISTA PARA EXCLUIR COMPETIÇÕES */}
+          <div className="mt-4 pt-4 border-t border-gray-800">
+             <h3 className="text-sm font-bold text-gray-400 mb-2">Competições Registadas:</h3>
+             {competitions.length === 0 ? <p className="text-xs text-gray-600">Nenhuma competição.</p> : (
+               <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                 {competitions.map(c => (
+                   <div key={c} className="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-800">
+                     <span className="text-sm font-bold text-blue-400">{c}</span>
+                     <button type="button" onClick={() => handleDeleteCompetition(c)} className="text-red-500 bg-red-900/20 rounded p-1 text-xs hover:bg-red-500 hover:text-white transition" title="Excluir Competição e Partidas">🗑️</button>
+                   </div>
+                 ))}
+               </div>
+             )}
+          </div>
+
         </div>
       </div>
 
       {/* === LADO DIREITO: FILTROS E LISTA DE JOGADORES === */}
-      {/* Reparou no col-span-2? Isto faz com que os jogadores ocupem as restantes 2 colunas à direita */}
       <div className="lg:col-span-2">
         {FilterComponent}
         
@@ -143,7 +157,6 @@ export default function AbaBaseDados({
           {displayedPlayers.map(player => {
             const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
             const categoriasAgrupadas = groupActionsByCategory(playerAcoes);
-
             const valoresAcoes = player.acoes_calc || player.acoes;
 
             return (
