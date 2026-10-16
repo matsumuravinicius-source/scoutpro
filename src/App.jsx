@@ -9,6 +9,7 @@ import AbaHistorico from './components/AbaHistorico';
 import AbaAnalise from './components/AbaAnalise';
 import AbaRanking from './components/AbaRanking';
 import AbaComparativo from './components/AbaComparativo';
+import AbaRelatorios from './components/AbaRelatorios';
 
 export const SETORES = {
   'GOLEIRO (GK)': ['GOLEIRO (GK)'],
@@ -488,6 +489,8 @@ export default function App() {
         {activeTab === 'leaderboard' && <AbaRanking FilterComponent={renderGlobalFilters(true)} rankMetric={rankMetric} setRankMetric={setRankMetric} TODAS_ACOES={TODAS_ACOES} getRankedPlayers={getRankedPlayers} />}
         
         {activeTab === 'comparativo' && <AbaComparativo startDateA={startDateA} setStartDateA={setStartDateA} endDateA={endDateA} setEndDateA={setEndDateA} filterTeamA={filterTeamA} setFilterTeamA={setFilterTeamA} teams={teams} filterCategoryA={filterCategoryA} setFilterCategoryA={setFilterCategoryA} uniqueCategories={uniqueCategories} filterSectorA={filterSectorA} setFilterSectorA={setFilterSectorA} SETORES={SETORES} compareA={compareA} setCompareA={setCompareA} filteredPlayersA={filteredPlayersA} startDateB={startDateB} setStartDateB={setStartDateB} endDateB={endDateB} setEndDateB={setEndDateB} filterTeamB={filterTeamB} setFilterTeamB={setFilterTeamB} filterCategoryB={filterCategoryB} setFilterCategoryB={setFilterCategoryB} filterSectorB={filterSectorB} setFilterSectorB={setFilterSectorB} compareB={compareB} setCompareB={setCompareB} filteredPlayersB={filteredPlayersB} TODAS_ACOES={TODAS_ACOES} players={safePlayers} getComputedStats={getComputedStats} matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} />}
+
+        {activeTab === 'relatorios' && <AbaRelatorios teams={teams} players={safePlayers} matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} uniqueCategories={uniqueCategories} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} savedMetrics={savedMetrics} isDateInRange={isDateInRange} getIdade={getIdade} />}
       </main>
     </div>
   );
