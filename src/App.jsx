@@ -362,39 +362,34 @@ export default function App() {
       setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p)); await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
     }
   };
-  const handleLiveAction = async (playerId, actionId, incrementValue) => { const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; if (incrementValue < 0 && currentMatchVal === 0) return; if (incrementValue > 0 && ['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas', 'defesas_dificeis'].includes(actionId)) { const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId; setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] ${safePlayers.find(p => p.id === playerId)?.nome} • ${acaoNome}`, ...prev]); } await processLiveAction(playerId, actionId, currentMatchVal + incrementValue, incrementValue); };
-  const handleSetLiveAction = async (playerId, actionId, value) => { const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0); const currentMatchVal = matchStats[playerId]?.[actionId]; const numericCurrent = (currentMatchVal === '' || currentMatchVal === undefined) ? 0 : parseInt(currentMatchVal); await processLiveAction(playerId, actionId, rawValue, (typeof rawValue === 'number' ? rawValue : 0) - numericCurrent); };
+  const handleLiveAction = async (playerId, actionId, incrementValue) => {
+    const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; 
+    if (incrementValue < 0 && currentMatchVal === 0) return;
+    
+    // Lista de ações que geram marcação de tempo clicável na Linha do Tempo (Vídeo)
+    const acoesLinhaDoTempo = [
+      'gols', 
+      'cartoes_amarelos', 
+      'cartoes_vermelhos', 
+      'passes_chave', 
+      'defesas', 
+      'defesas_dificeis',
+      'perdas_posse',
+      'erro_passe',
+      'finalizacoes_certas',
+      'finalizacoes_erradas',
+      'passes_frente'
+    ];
 
-  const encerrarPartida = async () => {
-    if (!window.confirm("Salvar o relatório e finalizar esta partida?")) return; setIsTimerRunning(false);
-    const dadosTratados = { ...matchStats }; Object.keys(dadosTratados).forEach(pId => { if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
-    const squadTeams = [...new Set(matchSquad.map(s => safePlayers.find(p => p.id === s.id)?.time_nome).filter(Boolean))];
-dadosTratados._meta = { 
-      eventLog: matchEventLog, periodLogs: periodLogs, 
-      gols_sofridos: opponentGoals, finalizacoes_adversario: opponentShots, ultimo_terco_adversario: opponentFinalThird, 
-      equipes: squadTeams, squad: matchSquad, competicao: matchCompetition,
-      videoUrl: matchVideoUrl, offsetT1: videoOffsetT1, offsetT2: videoOffsetT2 
-    };    
-    // Injeção Inteligente da Data
-    const payload = { titulo: matchTitle, dados: dadosTratados };
-    if (matchDate) { 
-       // Define a hora ao meio-dia para garantir que os fusos horários não mudam o dia
-       payload.criado_em = new Date(`${matchDate}T12:00:00`).toISOString(); 
+    if (incrementValue > 0 && acoesLinhaDoTempo.includes(actionId)) {
+      const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
+      setMatchEventLog(prev => [
+        `[T${currentPeriod} - ${formatTime(matchTime)}] ${safePlayers.find(p => p.id === playerId)?.nome} • ${acaoNome}`, 
+        ...prev
+      ]);
     }
-
-    const { data, error } = await supabase.from('partidas').insert([payload]).select();
-    if (!error && data) { 
-        setMatchHistory([data[0], ...safeMatchHistory]); 
-        setIsMatchActive(false); 
-        setMatchTitle(''); 
-        setMatchCompetition(''); 
-        setMatchDate(''); // Limpa a data após salvar
-        setMatchStats({}); 
-        setMatchSquad([]); 
-        setMatchTeam(''); 
-        setMatchCategory(''); 
-        setActiveTab('historico'); 
-    }
+    
+    await processLiveAction(playerId, actionId, currentMatchVal + incrementValue, incrementValue);
   };
 
   const handleEditMatchClick = (partida) => { setEditingMatchId(partida.id); setEditMatchData({ titulo: partida.titulo, dados: JSON.parse(JSON.stringify(partida.dados)) }); setExpandedMatch(partida.id); };
