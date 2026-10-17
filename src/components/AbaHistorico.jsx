@@ -25,6 +25,10 @@ export default function AbaHistorico({
   
   // Guarda o segundo atual de reprodução para cada partida aberta
   const [videoSeekState, setVideoSeekState] = useState({});
+  
+  // NOVOS ESTADOS: Filtros de Ação e de Atleta para a Linha do Tempo de cada partida
+  const [timelineActionFilter, setTimelineActionFilter] = useState({});
+  const [timelinePlayerFilter, setTimelinePlayerFilter] = useState({});
 
   const filteredHistory = matchHistory.filter(m => {
     if (filterMatchCompetition && m.dados?._meta?.competicao !== filterMatchCompetition) return false;
@@ -69,6 +73,46 @@ export default function AbaHistorico({
         filteredHistory.map(partida => {
           const ytId = extractYouTubeId(partida.dados?._meta?.videoUrl);
           const currentStartSec = videoSeekState[partida.id] || 0;
+
+          // Extração inteligente das Ações e Atletas presentes na Linha do Tempo desta partida
+          const rawLogs = partida.dados?._meta?.eventLog || [];
+          const selectedAction = timelineActionFilter[partida.id] || '';
+          const selectedPlayer = timelinePlayerFilter[partida.id] || '';
+
+          const uniqueActionsInLogs = [...new Set(rawLogs.map(log => {
+            if (log.includes('•')) return log.split('•')[1].trim();
+            if (log.includes('Substituição')) return 'Substituição';
+            return null;
+          }).filter(Boolean))].sort();
+
+          const uniquePlayersInLogs = [...new Set(rawLogs.map(log => {
+            if (log.includes('•')) {
+              const afterBracket = log.split(']')[1] || '';
+              return afterBracket.split('•')[0].trim();
+            }
+            return null;
+          }).filter(Boolean))].sort();
+
+          // Filtragem dos eventos da Linha do Tempo
+          const filteredLogs = rawLogs.filter(log => {
+            if (selectedAction) {
+              if (selectedAction === 'Substituição') {
+                if (!log.includes('Substituição')) return false;
+              } else {
+                const actionPart = log.includes('•') ? log.split('•')[1].trim() : '';
+                if (actionPart !== selectedAction) return false;
+              }
+            }
+            if (selectedPlayer) {
+              if (log.includes('•')) {
+                const playerPart = (log.split(']')[1] || '').split('•')[0].trim();
+                if (playerPart !== selectedPlayer) return false;
+              } else {
+                if (!log.includes(selectedPlayer)) return false;
+              }
+            }
+            return true;
+          });
 
           return (
             <div key={partida.id} className={`bg-gray-900 rounded-xl border transition ${editingMatchId === partida.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
@@ -122,8 +166,8 @@ export default function AbaHistorico({
                           </div>
                         </div>
 
-                        {/* GRELHA VÍDEO + LINHA DO TEMPO CLICÁVEL */}
-                        {(ytId || partida.dados._meta.eventLog?.length > 0) && (
+                        {/* GRELHA VÍDEO + LINHA DO TEMPO CLICÁVEL COM FILTROS */}
+                        {(ytId || rawLogs.length > 0) && (
                           <div className={`grid grid-cols-1 ${ytId ? 'lg:grid-cols-3' : ''} gap-4`}>
                             {ytId && (
                               <div className="lg:col-span-2 aspect-video bg-black rounded-lg overflow-hidden border border-gray-800">
@@ -138,22 +182,56 @@ export default function AbaHistorico({
                                 />
                               </div>
                             )}
-                            {partida.dados._meta.eventLog?.length > 0 && (
-                               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-96 overflow-y-auto flex flex-col">
-                                 <h4 className="text-gray-400 font-bold text-sm mb-1">⏱️ Linha do Tempo Interativa:</h4>
-                                 <p className="text-[10px] text-gray-500 mb-3">Clique num lance para avançar o vídeo.</p>
-                                 <div className="space-y-1.5">
-                                   {partida.dados._meta.eventLog.map((l, i) => (
-                                     <button
-                                       key={i}
-                                       type="button"
-                                       onClick={() => handleTimelineClick(partida, l)}
-                                       className="w-full text-left text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1.5 bg-gray-900/60 hover:bg-blue-900/30 hover:text-white rounded-r transition flex justify-between items-center group"
-                                     >
-                                       <span>{l}</span>
-                                       {ytId && <span className="text-[10px] text-blue-400 opacity-0 group-hover:opacity-100 font-bold pr-2">▶ Ver</span>}
-                                     </button>
-                                   ))}
+                            {rawLogs.length > 0 && (
+                               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 max-h-[420px] flex flex-col">
+                                 <div className="flex justify-between items-center mb-2">
+                                   <h4 className="text-gray-300 font-bold text-sm">⏱️ Linha do Tempo</h4>
+                                   <span className="text-[10px] bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded font-mono font-bold">
+                                     {filteredLogs.length} {filteredLogs.length === 1 ? 'lance' : 'lances'}
+                                   </span>
+                                 </div>
+
+                                 {/* FILTROS DE AÇÃO E ATLETA NA LINHA DO TEMPO */}
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 pb-2 border-b border-gray-800">
+                                   <select
+                                     value={selectedAction}
+                                     onChange={e => setTimelineActionFilter(prev => ({ ...prev, [partida.id]: e.target.value }))}
+                                     className="p-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-blue-400 font-bold outline-none focus:border-blue-500"
+                                   >
+                                     <option value="">Todas as Ações</option>
+                                     {uniqueActionsInLogs.map(act => (
+                                       <option key={act} value={act}>{act}</option>
+                                     ))}
+                                   </select>
+
+                                   <select
+                                     value={selectedPlayer}
+                                     onChange={e => setTimelinePlayerFilter(prev => ({ ...prev, [partida.id]: e.target.value }))}
+                                     className="p-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 font-bold outline-none focus:border-blue-500"
+                                   >
+                                     <option value="">Todos os Atletas</option>
+                                     {uniquePlayersInLogs.map(pl => (
+                                       <option key={pl} value={pl}>{pl}</option>
+                                     ))}
+                                   </select>
+                                 </div>
+
+                                 <div className="space-y-1.5 overflow-y-auto flex-1 pr-1">
+                                   {filteredLogs.length === 0 ? (
+                                     <p className="text-xs text-gray-600 text-center py-8">Nenhum lance encontrado para este filtro.</p>
+                                   ) : (
+                                     filteredLogs.map((l, i) => (
+                                       <button
+                                         key={i}
+                                         type="button"
+                                         onClick={() => handleTimelineClick(partida, l)}
+                                         className="w-full text-left text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1.5 bg-gray-900/60 hover:bg-blue-900/30 hover:text-white rounded-r transition flex justify-between items-center group"
+                                       >
+                                         <span>{l}</span>
+                                         {ytId && <span className="text-[10px] text-blue-400 opacity-0 group-hover:opacity-100 font-bold pr-2 whitespace-nowrap">▶ Ver</span>}
+                                       </button>
+                                     ))
+                                   )}
                                  </div>
                                </div>
                             )}
