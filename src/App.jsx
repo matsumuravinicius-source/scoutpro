@@ -64,6 +64,7 @@ export const ACOES_GOLEIRO = [
   { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos', categoria: 'Disciplinares' },
   { id: 'faltas_cometidas', nome: 'Faltas Cometidas', categoria: 'Disciplinares' }
 ];
+
 export const TODAS_ACOES = [...new Map([...ACOES_LINHA, ...ACOES_GOLEIRO].map(item => [item.id, item])).values()];
 
 export const isDateInRange = (dateString, startDate, endDate) => {
@@ -108,12 +109,13 @@ export default function App() {
   const [matchSquad, setMatchSquad] = useState([]); 
   const [isMatchActive, setIsMatchActive] = useState(false);
   const [matchTitle, setMatchTitle] = useState('');
-  
-  // NOVO ESTADO: Data retroativa da partida
   const [matchDate, setMatchDate] = useState('');
+  
+  // Estados de Vídeo e Sincronização
   const [matchVideoUrl, setMatchVideoUrl] = useState('');
   const [videoOffsetT1, setVideoOffsetT1] = useState('00:00');
   const [videoOffsetT2, setVideoOffsetT2] = useState('45:00');
+  
   const [matchStats, setMatchStats] = useState({});
   const [expandedMatch, setExpandedMatch] = useState(null);
   const [matchTime, setMatchTime] = useState(0);
@@ -362,11 +364,11 @@ export default function App() {
       setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p)); await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId);
     }
   };
+
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; 
     if (incrementValue < 0 && currentMatchVal === 0) return;
     
-    // Lista de ações que geram marcação de tempo clicável na Linha do Tempo (Vídeo)
     const acoesLinhaDoTempo = [
       'gols', 
       'cartoes_amarelos', 
@@ -390,6 +392,41 @@ export default function App() {
     }
     
     await processLiveAction(playerId, actionId, currentMatchVal + incrementValue, incrementValue);
+  };
+
+  const handleSetLiveAction = async (playerId, actionId, value) => { const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0); const currentMatchVal = matchStats[playerId]?.[actionId]; const numericCurrent = (currentMatchVal === '' || currentMatchVal === undefined) ? 0 : parseInt(currentMatchVal); await processLiveAction(playerId, actionId, rawValue, (typeof rawValue === 'number' ? rawValue : 0) - numericCurrent); };
+
+  const encerrarPartida = async () => {
+    if (!window.confirm("Salvar o relatório e finalizar esta partida?")) return; setIsTimerRunning(false);
+    const dadosTratados = { ...matchStats }; Object.keys(dadosTratados).forEach(pId => { if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
+    const squadTeams = [...new Set(matchSquad.map(s => safePlayers.find(p => p.id === s.id)?.time_nome).filter(Boolean))];
+    
+    dadosTratados._meta = { 
+      eventLog: matchEventLog, periodLogs: periodLogs, 
+      gols_sofridos: opponentGoals, finalizacoes_adversario: opponentShots, ultimo_terco_adversario: opponentFinalThird, 
+      equipes: squadTeams, squad: matchSquad, competicao: matchCompetition,
+      videoUrl: matchVideoUrl, offsetT1: videoOffsetT1, offsetT2: videoOffsetT2 
+    };
+    
+    const payload = { titulo: matchTitle, dados: dadosTratados };
+    if (matchDate) { 
+       payload.criado_em = new Date(`${matchDate}T12:00:00`).toISOString(); 
+    }
+
+    const { data, error } = await supabase.from('partidas').insert([payload]).select();
+    if (!error && data) { 
+        setMatchHistory([data[0], ...safeMatchHistory]); 
+        setIsMatchActive(false); 
+        setMatchTitle(''); 
+        setMatchCompetition(''); 
+        setMatchDate('');
+        setMatchVideoUrl('');
+        setMatchStats({}); 
+        setMatchSquad([]); 
+        setMatchTeam(''); 
+        setMatchCategory(''); 
+        setActiveTab('historico'); 
+    }
   };
 
   const handleEditMatchClick = (partida) => { setEditingMatchId(partida.id); setEditMatchData({ titulo: partida.titulo, dados: JSON.parse(JSON.stringify(partida.dados)) }); setExpandedMatch(partida.id); };
@@ -480,8 +517,7 @@ export default function App() {
         
         {activeTab === 'scout' && <AbaBaseDados novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={renderGlobalFilters(true)} displayedPlayers={playersWithCalculatedStats} toggleExpandPlayer={toggleExpandPlayer} handleEditClick={handleEditClick} handleDeletePlayer={handleDeletePlayer} getIdade={getIdade} expandedPlayers={expandedPlayers} SETORES={SETORES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetGlobalAction={handleSetGlobalAction} handleUpdateGlobalActions={handleUpdateGlobalActions} competitions={competitions} newCompetitionName={newCompetitionName} setNewCompetitionName={setNewCompetitionName} handleAddCompetition={handleAddCompetition} handleDeleteCompetition={handleDeleteCompetition} />}
         
-        {/* Adicionado o matchDate e setMatchDate à AbaLiveMatch */}
-        {activeTab === 'live' && <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchDate={matchDate} setMatchDate={setMatchDate} matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} matchTeam={matchTeam} setMatchTeam={setMatchTeam} matchCategory={matchCategory} setMatchCategory={setMatchCategory} matchSquad={matchSquad} setMatchSquad={setMatchSquad} handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} teams={teams} players={safePlayers} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} matchVideoUrl={matchVideoUrl} setMatchVideoUrl={setMatchVideoUrl} videoOffsetT1={videoOffsetT1} setVideoOffsetT1={setVideoOffsetT1} videoOffsetT2={videoOffsetT2} setVideoOffsetT2={setVideoOffsetT2}/>}
+        {activeTab === 'live' && <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchDate={matchDate} setMatchDate={setMatchDate} matchVideoUrl={matchVideoUrl} setMatchVideoUrl={setMatchVideoUrl} videoOffsetT1={videoOffsetT1} setVideoOffsetT1={setVideoOffsetT1} videoOffsetT2={videoOffsetT2} setVideoOffsetT2={setVideoOffsetT2} matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} matchTeam={matchTeam} setMatchTeam={setMatchTeam} matchCategory={matchCategory} setMatchCategory={setMatchCategory} matchSquad={matchSquad} setMatchSquad={setMatchSquad} handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} teams={teams} players={safePlayers} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />}
         
         {activeTab === 'historico' && <AbaHistorico matchHistory={safeMatchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={safePlayers} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitionsHistory} historyStartDate={historyStartDate} setHistoryStartDate={setHistoryStartDate} historyEndDate={historyEndDate} setHistoryEndDate={setHistoryEndDate} isDateInRange={isDateInRange} />}
         
