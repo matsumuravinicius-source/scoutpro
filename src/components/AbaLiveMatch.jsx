@@ -1,8 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+
+// Funções auxiliares de Vídeo e Tempo
+const extractYouTubeId = (url) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
+const timeToSeconds = (timeStr) => {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+};
 
 export default function AbaLiveMatch({
   isMatchActive, matchTitle, setMatchTitle, 
   matchDate, setMatchDate,
+  matchVideoUrl, setMatchVideoUrl, videoOffsetT1, setVideoOffsetT1, videoOffsetT2, setVideoOffsetT2,
   matchCompetition, setMatchCompetition, competitions,
   matchTeam, setMatchTeam, 
   matchCategory, setMatchCategory,
@@ -16,11 +33,17 @@ export default function AbaLiveMatch({
 }) {
   
   const [expandedLivePlayers, setExpandedLivePlayers] = useState([]);
-  // NOVO ESTADO: Controla quais os sub-menus de cada jogador estão abertos
   const [expandedCategories, setExpandedCategories] = useState({});
   const [subPlayerOut, setSubPlayerOut] = useState(null); 
 
+  // Estados do Leitor de Vídeo
+  const [localVideoFileUrl, setLocalVideoFileUrl] = useState(null);
+  const [ytStartSeconds, setYtStartSeconds] = useState(0);
+  const [preRollSeconds, setPreRollSeconds] = useState(3); // Recuar 3s por defeito para ver o início do lance
+  const localVideoRef = useRef(null);
+
   const isActionDisabled = matchTime === 0 || currentPeriod > 4;
+  const youtubeId = extractYouTubeId(matchVideoUrl);
 
   const teamCategories = matchTeam 
     ? [...new Set(players.filter(p => p.time_nome === matchTeam).map(p => p.categoria).filter(Boolean))]
@@ -40,23 +63,47 @@ export default function AbaLiveMatch({
     if(subPlayerOut === id) setSubPlayerOut(null); 
   };
 
-  // NOVA FUNÇÃO: Abre e fecha o sub-menu específico daquele jogador
   const toggleCategory = (playerId, catName) => {
     const key = `${playerId}-${catName}`;
-    setExpandedCategories(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+    setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleSubstitution = (playerOutId, playerInId) => {
     if(!playerInId) return;
     const pOut = players.find(p => p.id === playerOutId);
     const pIn = players.find(p => p.id === playerInId);
-    
     handlePerformSubstitution(playerOutId, playerInId);
     setMatchEventLog(prev => [`[T${currentPeriod} - ${formatTime(matchTime)}] 🔄 Substituição: SAIU ${pOut.nome} | ENTROU ${pIn.nome}`, ...prev]);
     setSubPlayerOut(null); 
+  };
+
+  // Carregar ficheiro de vídeo do PC (Ideal para Electron / Offline)
+  const handleLocalFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setLocalVideoFileUrl(url);
+    }
+  };
+
+  // Salto inteligente para o tempo do vídeo ao clicar na Linha do Tempo
+  const jumpToEventTime = (logString) => {
+    const match = logString.match(/\[T(\d+)\s*-\s*(\d{2}:\d{2})\]/);
+    if (!match) return;
+
+    const period = parseInt(match[1]);
+    const eventSeconds = timeToSeconds(match[2]);
+    const offsetSeconds = period === 1 ? timeToSeconds(videoOffsetT1) : timeToSeconds(videoOffsetT2);
+    
+    // Calcula o segundo exato no vídeo (descontando o pre-roll para ver o início da jogada)
+    const targetSecond = Math.max(0, offsetSeconds + eventSeconds - preRollSeconds);
+
+    if (localVideoFileUrl && localVideoRef.current) {
+      localVideoRef.current.currentTime = targetSecond;
+      localVideoRef.current.play();
+    } else if (youtubeId) {
+      setYtStartSeconds(targetSecond);
+    }
   };
 
   const renderSquadListItem = (sq) => {
@@ -65,9 +112,7 @@ export default function AbaLiveMatch({
     return (
       <div key={sq.id} className="flex flex-col sm:flex-row items-center bg-gray-900 border border-gray-800 p-2 rounded-lg gap-3">
         <input 
-          type="number" 
-          placeholder="Nº" 
-          value={sq.numero} 
+          type="number" placeholder="Nº" value={sq.numero} 
           onChange={e => handleUpdateSquadPlayer(sq.id, 'numero', e.target.value)} 
           className="w-16 p-2 bg-gray-950 rounded border border-gray-700 text-center font-bold outline-none focus:border-blue-500" 
         />
@@ -98,13 +143,11 @@ export default function AbaLiveMatch({
       {!isMatchActive ? (
         <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-xl max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-2">Preparar Partida</h2>
-          <p className="text-gray-400 mb-6">Defina a competição, título do jogo, data (opcional para registo retroativo) e a lista de convocados.</p>
+          <p className="text-gray-400 mb-6">Defina a competição, título do jogo, link de vídeo (opcional) e a lista de convocados.</p>
           
           <div className="flex flex-col md:flex-row gap-4 mb-4">
             <select 
-              required 
-              value={matchCompetition} 
-              onChange={e => setMatchCompetition(e.target.value)} 
+              required value={matchCompetition} onChange={e => setMatchCompetition(e.target.value)} 
               className="flex-1 p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500"
             >
               <option value="">Selecione a Competição...</option>
@@ -112,23 +155,48 @@ export default function AbaLiveMatch({
             </select>
 
             <input 
-              type="text" 
-              placeholder="Título do Jogo (Ex: Final vs Flamengo)" 
-              required 
-              value={matchTitle} 
-              onChange={e => setMatchTitle(e.target.value)} 
+              type="text" placeholder="Título do Jogo (Ex: Final vs Flamengo)" required 
+              value={matchTitle} onChange={e => setMatchTitle(e.target.value)} 
               className="flex-[2] p-4 bg-gray-950 rounded-lg border border-gray-700 text-lg outline-none focus:border-blue-500" 
             />
 
             <div className="flex flex-col justify-center bg-gray-950 px-4 py-2 rounded-lg border border-gray-700 focus-within:border-blue-500">
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Data do Jogo (Opcional)</span>
               <input 
-                type="date" 
-                value={matchDate} 
-                onChange={e => setMatchDate(e.target.value)} 
+                type="date" value={matchDate} onChange={e => setMatchDate(e.target.value)} 
                 className="bg-transparent text-blue-400 font-bold outline-none text-sm cursor-pointer"
-                title="Se deixar em branco, usará a data e hora de hoje"
               />
+            </div>
+          </div>
+
+          {/* NOVO BLOCO: INTEGRAÇÃO DE VÍDEO NA PREPARAÇÃO */}
+          <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 mb-6 space-y-3">
+            <h3 className="text-xs font-black uppercase tracking-widest text-blue-400 flex items-center gap-2">
+              🎥 Vídeo da Partida & Sincronização (Opcional)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="md:col-span-2">
+                <label className="block text-[10px] text-gray-500 font-bold uppercase mb-1">Link do YouTube</label>
+                <input 
+                  type="text" placeholder="https://www.youtube.com/watch?v=..." 
+                  value={matchVideoUrl} onChange={e => setMatchVideoUrl(e.target.value)} 
+                  className="w-full p-2.5 bg-gray-900 rounded-lg border border-gray-700 text-sm outline-none focus:border-blue-500 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 font-bold uppercase mb-1" title="Minuto do vídeo em que o árbitro apita o início do 1º Tempo">Início 1ºT no Vídeo</label>
+                <input 
+                  type="text" placeholder="00:00" value={videoOffsetT1} onChange={e => setVideoOffsetT1(e.target.value)} 
+                  className="w-full p-2.5 bg-gray-900 rounded-lg border border-gray-700 text-sm font-mono text-center text-blue-400 font-bold outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 font-bold uppercase mb-1" title="Minuto do vídeo em que o árbitro apita o início do 2º Tempo">Início 2ºT no Vídeo</label>
+                <input 
+                  type="text" placeholder="45:00" value={videoOffsetT2} onChange={e => setVideoOffsetT2(e.target.value)} 
+                  className="w-full p-2.5 bg-gray-900 rounded-lg border border-gray-700 text-sm font-mono text-center text-blue-400 font-bold outline-none"
+                />
+              </div>
             </div>
           </div>
           
@@ -198,8 +266,7 @@ export default function AbaLiveMatch({
               <div className="flex gap-2 w-full mb-4">
                 {!isTimerRunning ? (
                   <button 
-                    disabled={currentPeriod > 4} 
-                    onClick={() => setIsTimerRunning(true)} 
+                    disabled={currentPeriod > 4} onClick={() => setIsTimerRunning(true)} 
                     className={`flex-1 py-3 rounded-lg font-bold text-lg transition shadow-lg ${currentPeriod > 4 ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50' : 'bg-green-600 hover:bg-green-500 text-white'}`}
                   >
                     ▶ Iniciar
@@ -212,8 +279,7 @@ export default function AbaLiveMatch({
               </div>
 
               <button 
-                onClick={handleFinalizarTempo} 
-                disabled={currentPeriod > 4} 
+                onClick={handleFinalizarTempo} disabled={currentPeriod > 4} 
                 className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 py-2 rounded-lg font-bold mb-6 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {currentPeriod > 4 ? '⏹ Partida Encerrada' : `⏹ Finalizar ${currentPeriod}º Tempo`}
@@ -253,16 +319,104 @@ export default function AbaLiveMatch({
               <button onClick={encerrarPartida} className="w-full px-6 py-3 bg-red-700 hover:bg-red-600 rounded-lg font-bold transition shadow-lg shadow-red-900/20">Terminar e Gravar</button>
             </div>
 
+            {/* LINHA DO TEMPO COM CLIQUE PARA SALTAR NO VÍDEO */}
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl h-96 flex flex-col">
-              <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2">⏱️ Linha do Tempo</h3>
-              <div className="flex-1 bg-gray-950 rounded-lg border border-gray-800 p-3 overflow-y-auto space-y-2">
-                {matchEventLog.length === 0 ? <div className="text-gray-600 text-xs text-center mt-10">Eventos e Ações aparecerão aqui.</div> : matchEventLog.map((log, i) => <div key={i} className="text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1 bg-gray-900/50 rounded-r">{log}</div>)}
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-bold text-gray-300 flex items-center gap-2 text-sm">⏱️ Linha do Tempo</h3>
+                <select 
+                  value={preRollSeconds} onChange={e => setPreRollSeconds(Number(e.target.value))}
+                  className="bg-gray-950 text-[10px] text-blue-400 font-bold p-1 rounded border border-gray-800 outline-none"
+                  title="Segundos de antecedência ao clicar no lance"
+                >
+                  <option value={0}>Exato (0s)</option>
+                  <option value={3}>Recuar -3s</option>
+                  <option value={5}>Recuar -5s</option>
+                  <option value={10}>Recuar -10s</option>
+                </select>
+              </div>
+              <p className="text-[10px] text-gray-500 mb-2">Clique num evento abaixo para saltar diretamente para o lance no vídeo.</p>
+              
+              <div className="flex-1 bg-gray-950 rounded-lg border border-gray-800 p-2 overflow-y-auto space-y-1.5">
+                {matchEventLog.length === 0 ? (
+                  <div className="text-gray-600 text-xs text-center mt-10">Eventos e Ações aparecerão aqui.</div>
+                ) : (
+                  matchEventLog.map((log, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => jumpToEventTime(log)}
+                      className="w-full text-left text-xs text-gray-300 border-l-2 border-blue-500 pl-2 py-1.5 bg-gray-900/60 hover:bg-blue-900/30 hover:text-white rounded-r transition flex justify-between items-center group"
+                    >
+                      <span>{log}</span>
+                      <span className="text-[10px] text-blue-400 opacity-0 group-hover:opacity-100 font-bold pr-2 transition">▶ Ver</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </div>
 
-          <div className="xl:col-span-3 space-y-8 content-start">
+          <div className="xl:col-span-3 space-y-6 content-start">
             
+            {/* ==========================================
+                ECRÃ DE VÍDEO INTEGRADO (YOUTUBE OU FICHEIRO LOCAL)
+                ========================================== */}
+            <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl space-y-3">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-b border-gray-800 pb-3">
+                <div className="flex items-center gap-2 w-full lg:w-auto flex-1">
+                  <span className="text-lg">📺</span>
+                  <input 
+                    type="text" placeholder="Cole aqui o link do YouTube..." 
+                    value={matchVideoUrl} onChange={e => setMatchVideoUrl(e.target.value)}
+                    className="flex-1 p-2 bg-gray-950 rounded border border-gray-700 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+                  <div className="flex items-center gap-1 bg-gray-950 px-2 py-1 rounded border border-gray-800">
+                    <span className="text-[10px] text-gray-400 font-bold">1ºT no Vídeo:</span>
+                    <input type="text" value={videoOffsetT1} onChange={e => setVideoOffsetT1(e.target.value)} className="w-14 bg-transparent text-xs font-mono text-blue-400 font-bold text-center outline-none" />
+                  </div>
+                  <div className="flex items-center gap-1 bg-gray-950 px-2 py-1 rounded border border-gray-800">
+                    <span className="text-[10px] text-gray-400 font-bold">2ºT no Vídeo:</span>
+                    <input type="text" value={videoOffsetT2} onChange={e => setVideoOffsetT2(e.target.value)} className="w-14 bg-transparent text-xs font-mono text-blue-400 font-bold text-center outline-none" />
+                  </div>
+                  <label className="cursor-pointer bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-300 px-3 py-1.5 rounded border border-gray-700 transition">
+                    📁 Ficheiro Local
+                    <input type="file" accept="video/*" onChange={handleLocalFileUpload} className="hidden" />
+                  </label>
+                </div>
+              </div>
+
+              {localVideoFileUrl ? (
+                <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-gray-800">
+                  <video ref={localVideoRef} src={localVideoFileUrl} controls className="w-full h-full" />
+                  <button 
+                    onClick={() => setLocalVideoFileUrl(null)} 
+                    className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded"
+                  >
+                    Fechar Vídeo Local
+                  </button>
+                </div>
+              ) : youtubeId ? (
+                <div className="aspect-video w-full bg-black rounded-lg overflow-hidden border border-gray-800">
+                  <iframe
+                    key={`${youtubeId}-${ytStartSeconds}`}
+                    className="w-full h-full"
+                    src={`https://www.youtube.com/embed/${youtubeId}?start=${ytStartSeconds}&autoplay=1&rel=0`}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500 text-xs bg-gray-950/50 rounded-lg border border-gray-800 border-dashed">
+                  Cole um link do YouTube acima ou carregue um ficheiro de vídeo do seu computador para analisar a partida com vídeo sincronizado.
+                </div>
+              )}
+            </div>
+
             <div>
               <h3 className="text-xl font-black text-blue-400 mb-4 border-b border-gray-800 pb-2 flex justify-between">
                 <span>⚽ Em Campo</span>
@@ -322,11 +476,9 @@ export default function AbaLiveMatch({
                             🔄 Substituir Atleta
                           </button>
                           
-                          {/* SUB-MENUS EXPANSÍVEIS EM CAMPO */}
                           <div className="space-y-2">
                             {Object.keys(categoriasAgrupadas).map(catName => {
                               const isCatExpanded = expandedCategories[`${sq.id}-${catName}`];
-                              // Soma rápida das ações desta categoria (exceto minutos) para mostrar no cabeçalho fechado
                               const totalCatActions = categoriasAgrupadas[catName].reduce((sum, acao) => {
                                 if (acao.id === 'minutos') return sum;
                                 return sum + (parseInt(matchStats[sq.id]?.[acao.id]) || 0);
@@ -417,7 +569,6 @@ export default function AbaLiveMatch({
                           <div className="p-3 border-t border-gray-800/50 bg-gray-900/30">
                             <p className="text-[10px] text-orange-500 font-bold mb-3 text-center bg-orange-950/20 p-1 rounded">🚫 Ações bloqueadas enquanto estiver no banco.</p>
                             
-                            {/* SUB-MENUS EXPANSÍVEIS NO BANCO */}
                             <div className="space-y-2 opacity-60">
                               {Object.keys(categoriasAgrupadas).map(catName => {
                                 const isCatExpanded = expandedCategories[`${sq.id}-${catName}`];
