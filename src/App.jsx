@@ -20,33 +20,22 @@ export const SETORES = {
 };
 
 export const ACOES_LINHA = [
-  // Geral / Físico
   { id: 'partidas', nome: 'Partidas', categoria: 'Geral' }, 
   { id: 'minutos', nome: 'Minutos Jogados', categoria: 'Geral' },
   { id: 'progressoes', nome: 'Progressões', categoria: 'Geral' },
-
-  // Finalizações
   { id: 'finalizacoes_certas', nome: 'Fin. Certas', categoria: 'Finalizações' }, 
   { id: 'finalizacoes_erradas', nome: 'Fin. Erradas', categoria: 'Finalizações' }, 
   { id: 'gols', nome: 'Golos', categoria: 'Finalizações' },
-
-  // Passes
   { id: 'cruzamentos', nome: 'Cruzamentos', categoria: 'Passes' },
   { id: 'passes_chave', nome: 'Passes Chave', categoria: 'Passes' },
   { id: 'passes_frente', nome: 'Passes p/ Frente', categoria: 'Passes' },
   { id: 'assistencias', nome: 'Assistências', categoria: 'Passes' },
-
-  // Defensivo
   { id: 'desarmes', nome: 'Desarmes', categoria: 'Defensivo' },
   { id: 'duelos_aereos', nome: 'Duelos Aéreos', categoria: 'Defensivo' },
   { id: 'bloqueios', nome: 'Bloqueios', categoria: 'Defensivo' },
-
-  // Disciplinares
   { id: 'cartoes_amarelos', nome: 'Cartões Amarelos', categoria: 'Disciplinares' },
   { id: 'cartoes_vermelhos', nome: 'Cartões Vermelhos', categoria: 'Disciplinares' },
   { id: 'faltas_cometidas', nome: 'Faltas Cometidas', categoria: 'Disciplinares' },
-
-  // Erros
   { id: 'perdas_posse', nome: 'Perdas de Posse', categoria: 'Erros' },
   { id: 'erro_passe', nome: 'Erro de Passe', categoria: 'Erros' }
 ];
@@ -80,7 +69,6 @@ export default function App() {
   const [session, setSession] = useState(null);
 
   const [activeTab, setActiveTab] = useState('scout');
-  // NOVO ESTADO: Controla qual atleta está com a página de perfil aberta
   const [selectedPlayerProfileId, setSelectedPlayerProfileId] = useState(null);
 
   const [teams, setTeams] = useState([]);
@@ -334,7 +322,6 @@ export default function App() {
     }
   };
 
-  // NOVA FUNÇÃO: Atualiza os dados biométricos diretamente na página de Perfil do Atleta
   const handleUpdatePlayerBio = async (playerId, updatedFields) => {
     const funcoesLimpas = (updatedFields.funcoes || []).filter(f => f.trim() !== '');
     if (funcoesLimpas.length === 0) {
@@ -422,16 +409,11 @@ export default function App() {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; 
     if (incrementValue < 0 && currentMatchVal === 0) return;
     
-    const acoesLinhaDoTempo = [
-      'gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 
-      'defesas', 'defesas_dificeis', 'perdas_posse', 'erro_passe',
-      'finalizacoes_certas', 'finalizacoes_erradas', 'passes_frente'
-    ];
-
-    if (incrementValue > 0 && acoesLinhaDoTempo.includes(actionId)) {
+    if (incrementValue > 0 && !['partidas', 'minutos'].includes(actionId)) {
       const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
+      const nomeAtleta = safePlayers.find(p => p.id === playerId)?.nome || 'Atleta';
       setMatchEventLog(prev => [
-        `[T${currentPeriod} - ${formatTime(matchTime)}] ${safePlayers.find(p => p.id === playerId)?.nome} • ${acaoNome}`, 
+        `[T${currentPeriod} - ${formatTime(matchTime)}] ${nomeAtleta} • ${acaoNome}`, 
         ...prev
       ]);
     }
@@ -541,7 +523,6 @@ export default function App() {
 
   if (!session) return <Login />;
 
-  // Procura o objeto do atleta selecionado (já com estatísticas calculadas caso haja filtro de data)
   const selectedProfilePlayer = safePlayers
     .map(p => ({
       ...p,
@@ -556,7 +537,7 @@ export default function App() {
         activeTab={activeTab} 
         setActiveTab={(tab) => {
           setActiveTab(tab);
-          setSelectedPlayerProfileId(null); // Fecha o perfil individual ao trocar de aba no topo
+          setSelectedPlayerProfileId(null);
         }} 
       />
       <datalist id="categorias-list">{uniqueCategories.map(c => <option key={c} value={c} />)}</datalist>
@@ -575,7 +556,6 @@ export default function App() {
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'clubes' && <AbaClubes teams={teams} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} />}
         
-        {/* SE ESTIVER NA ABA SCOUT: Mostra a Página do Atleta se houver um selecionado, ou o Diretório da Base de Dados */}
         {activeTab === 'scout' && (
           selectedProfilePlayer ? (
             <PerfilAtleta
