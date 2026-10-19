@@ -39,7 +39,8 @@ export default function AbaLiveMatch({
   // Estados do Leitor de Vídeo
   const [localVideoFileUrl, setLocalVideoFileUrl] = useState(null);
   const [ytStartSeconds, setYtStartSeconds] = useState(0);
-  const [preRollSeconds, setPreRollSeconds] = useState(3); // Recuar 3s por defeito para ver o início do lance
+  const [seekCounter, setSeekCounter] = useState(0); // Força o iframe a atualizar mesmo clicando no mesmo tempo
+  const [preRollSeconds, setPreRollSeconds] = useState(3);
   const localVideoRef = useRef(null);
 
   const isActionDisabled = matchTime === 0 || currentPeriod > 4;
@@ -77,7 +78,6 @@ export default function AbaLiveMatch({
     setSubPlayerOut(null); 
   };
 
-  // Carregar ficheiro de vídeo do PC (Ideal para Electron / Offline)
   const handleLocalFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -86,7 +86,25 @@ export default function AbaLiveMatch({
     }
   };
 
-  // Salto inteligente para o tempo do vídeo ao clicar na Linha do Tempo
+  // NOVA FUNÇÃO: Salta para qualquer segundo específico no vídeo
+  const seekVideoToSeconds = (targetSec) => {
+    const safeSec = Math.max(0, targetSec);
+    if (localVideoFileUrl && localVideoRef.current) {
+      localVideoRef.current.currentTime = safeSec;
+      localVideoRef.current.play();
+    } else if (youtubeId) {
+      setYtStartSeconds(safeSec);
+      setSeekCounter(prev => prev + 1);
+    }
+  };
+
+  // Salto para o início exato do 1º ou 2º Tempo
+  const jumpToPeriodStart = (periodNumber) => {
+    const offsetStr = periodNumber === 1 ? videoOffsetT1 : videoOffsetT2;
+    seekVideoToSeconds(timeToSeconds(offsetStr));
+  };
+
+  // Salto inteligente para o tempo do evento na Linha do Tempo
   const jumpToEventTime = (logString) => {
     const match = logString.match(/\[T(\d+)\s*-\s*(\d{2}:\d{2})\]/);
     if (!match) return;
@@ -95,15 +113,8 @@ export default function AbaLiveMatch({
     const eventSeconds = timeToSeconds(match[2]);
     const offsetSeconds = period === 1 ? timeToSeconds(videoOffsetT1) : timeToSeconds(videoOffsetT2);
     
-    // Calcula o segundo exato no vídeo (descontando o pre-roll para ver o início da jogada)
     const targetSecond = Math.max(0, offsetSeconds + eventSeconds - preRollSeconds);
-
-    if (localVideoFileUrl && localVideoRef.current) {
-      localVideoRef.current.currentTime = targetSecond;
-      localVideoRef.current.play();
-    } else if (youtubeId) {
-      setYtStartSeconds(targetSecond);
-    }
+    seekVideoToSeconds(targetSecond);
   };
 
   const renderSquadListItem = (sq) => {
@@ -169,7 +180,6 @@ export default function AbaLiveMatch({
             </div>
           </div>
 
-          {/* NOVO BLOCO: INTEGRAÇÃO DE VÍDEO NA PREPARAÇÃO */}
           <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 mb-6 space-y-3">
             <h3 className="text-xs font-black uppercase tracking-widest text-blue-400 flex items-center gap-2">
               🎥 Vídeo da Partida & Sincronização (Opcional)
@@ -319,7 +329,6 @@ export default function AbaLiveMatch({
               <button onClick={encerrarPartida} className="w-full px-6 py-3 bg-red-700 hover:bg-red-600 rounded-lg font-bold transition shadow-lg shadow-red-900/20">Terminar e Gravar</button>
             </div>
 
-            {/* LINHA DO TEMPO COM CLIQUE PARA SALTAR NO VÍDEO */}
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl h-96 flex flex-col">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="font-bold text-gray-300 flex items-center gap-2 text-sm">⏱️ Linha do Tempo</h3>
@@ -359,7 +368,7 @@ export default function AbaLiveMatch({
           <div className="xl:col-span-3 space-y-6 content-start">
             
             {/* ==========================================
-                ECRÃ DE VÍDEO INTEGRADO (YOUTUBE OU FICHEIRO LOCAL)
+                ECRÃ DE VÍDEO COM BOTÕES CLICÁVEIS DE 1ºT E 2ºT
                 ========================================== */}
             <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl space-y-3">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-b border-gray-800 pb-3">
@@ -372,15 +381,45 @@ export default function AbaLiveMatch({
                   />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-                  <div className="flex items-center gap-1 bg-gray-950 px-2 py-1 rounded border border-gray-800">
-                    <span className="text-[10px] text-gray-400 font-bold">1ºT no Vídeo:</span>
-                    <input type="text" value={videoOffsetT1} onChange={e => setVideoOffsetT1(e.target.value)} className="w-14 bg-transparent text-xs font-mono text-blue-400 font-bold text-center outline-none" />
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                  {/* BOTÃO + INPUT 1º TEMPO */}
+                  <div className="flex items-center bg-gray-950 rounded border border-gray-800 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => jumpToPeriodStart(1)}
+                      className="bg-blue-900/30 hover:bg-blue-600 text-blue-400 hover:text-white text-[10px] font-black px-2 py-1.5 transition flex items-center gap-1 border-r border-gray-800"
+                      title="Clique para ir ao início do 1º Tempo no vídeo"
+                    >
+                      ▶ Início 1ºT
+                    </button>
+                    <input 
+                      type="text" 
+                      value={videoOffsetT1} 
+                      onChange={e => setVideoOffsetT1(e.target.value)} 
+                      className="w-14 bg-transparent text-xs font-mono text-blue-400 font-bold text-center outline-none py-1" 
+                      title="Editar minuto de início do 1º Tempo no vídeo"
+                    />
                   </div>
-                  <div className="flex items-center gap-1 bg-gray-950 px-2 py-1 rounded border border-gray-800">
-                    <span className="text-[10px] text-gray-400 font-bold">2ºT no Vídeo:</span>
-                    <input type="text" value={videoOffsetT2} onChange={e => setVideoOffsetT2(e.target.value)} className="w-14 bg-transparent text-xs font-mono text-blue-400 font-bold text-center outline-none" />
+
+                  {/* BOTÃO + INPUT 2º TEMPO */}
+                  <div className="flex items-center bg-gray-950 rounded border border-gray-800 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => jumpToPeriodStart(2)}
+                      className="bg-blue-900/30 hover:bg-blue-600 text-blue-400 hover:text-white text-[10px] font-black px-2 py-1.5 transition flex items-center gap-1 border-r border-gray-800"
+                      title="Clique para ir ao início do 2º Tempo no vídeo"
+                    >
+                      ▶ Início 2ºT
+                    </button>
+                    <input 
+                      type="text" 
+                      value={videoOffsetT2} 
+                      onChange={e => setVideoOffsetT2(e.target.value)} 
+                      className="w-14 bg-transparent text-xs font-mono text-blue-400 font-bold text-center outline-none py-1" 
+                      title="Editar minuto de início do 2º Tempo no vídeo"
+                    />
                   </div>
+
                   <label className="cursor-pointer bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-300 px-3 py-1.5 rounded border border-gray-700 transition">
                     📁 Ficheiro Local
                     <input type="file" accept="video/*" onChange={handleLocalFileUpload} className="hidden" />
@@ -401,7 +440,7 @@ export default function AbaLiveMatch({
               ) : youtubeId ? (
                 <div className="aspect-video w-full bg-black rounded-lg overflow-hidden border border-gray-800">
                   <iframe
-                    key={`${youtubeId}-${ytStartSeconds}`}
+                    key={`${youtubeId}-${ytStartSeconds}-${seekCounter}`}
                     className="w-full h-full"
                     src={`https://www.youtube.com/embed/${youtubeId}?start=${ytStartSeconds}&autoplay=1&rel=0`}
                     title="YouTube video player"
