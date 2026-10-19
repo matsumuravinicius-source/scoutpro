@@ -1,40 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function AbaBaseDados({
-  novoJogador, setNovoJogador, teams, handleSavePlayer, editingPlayerId,
-  cancelarEdicao, FilterComponent, displayedPlayers, toggleExpandPlayer,
-  handleEditClick, handleDeletePlayer, expandedPlayers,
-  SETORES, ACOES_LINHA, ACOES_GOLEIRO, handleSetGlobalAction, handleUpdateGlobalActions,
-  competitions, newCompetitionName, setNewCompetitionName, handleAddCompetition, handleDeleteCompetition 
+  novoJogador, setNovoJogador, teams, handleSavePlayer,
+  FilterComponent, displayedPlayers, onSelectPlayer,
+  SETORES, competitions, newCompetitionName, setNewCompetitionName,
+  handleAddCompetition, handleDeleteCompetition 
 }) {
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const groupActionsByCategory = (acoesArray) => {
-    return acoesArray.reduce((acc, acao) => {
-      const catName = acao.categoria || 'Estatísticas Globais';
-      if (!acc[catName]) acc[catName] = [];
-      acc[catName].push(acao);
-      return acc;
-    }, {});
-  };
+  // Filtra os atletas pelo nome digitado na barra de pesquisa rápida
+  const finalPlayers = displayedPlayers.filter(p =>
+    p.nome.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       
-      {/* === LADO ESQUERDO: FORMULÁRIOS === */}
+      {/* === LADO ESQUERDO: FORMULÁRIOS DE CADASTRO === */}
       <div className="lg:col-span-1 space-y-6">
         
-        {/* Formulário de Atleta */}
+        {/* Formulário de Novo Atleta */}
         <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              {editingPlayerId ? '✏️ Editar Atleta' : '➕ Novo Atleta'}
-            </h2>
-            {editingPlayerId && (
-              <button type="button" onClick={cancelarEdicao} className="text-sm font-bold text-red-500 hover:text-red-400 bg-red-900/20 px-3 py-1 rounded">
-                Cancelar
-              </button>
-            )}
-          </div>
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+            ➕ Cadastrar Novo Atleta
+          </h2>
           
           <form onSubmit={handleSavePlayer} className="space-y-4">
             <div>
@@ -114,7 +103,7 @@ export default function AbaBaseDados({
             </div>
 
             <button type="submit" className="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-lg transition shadow-lg shadow-blue-900/20">
-              {editingPlayerId ? 'Salvar Alterações do Atleta' : 'Gravar Novo Atleta'}
+              Gravar Novo Atleta
             </button>
           </form>
         </div>
@@ -131,11 +120,10 @@ export default function AbaBaseDados({
             </button>
           </form>
 
-          {/* LISTA PARA EXCLUIR COMPETIÇÕES */}
           <div className="mt-4 pt-4 border-t border-gray-800">
              <h3 className="text-sm font-bold text-gray-400 mb-2">Competições Registadas:</h3>
              {competitions.length === 0 ? <p className="text-xs text-gray-600">Nenhuma competição.</p> : (
-               <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+               <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                  {competitions.map(c => (
                    <div key={c} className="flex justify-between items-center bg-gray-950 p-2 rounded border border-gray-800">
                      <span className="text-sm font-bold text-blue-400">{c}</span>
@@ -145,69 +133,73 @@ export default function AbaBaseDados({
                </div>
              )}
           </div>
-
         </div>
+
       </div>
 
-      {/* === LADO DIREITO: FILTROS E LISTA DE JOGADORES === */}
-      <div className="lg:col-span-2">
+      {/* === LADO DIREITO: DIRETÓRIO DE ATLETAS (REDIRECIONAMENTO) === */}
+      <div className="lg:col-span-2 space-y-4">
         {FilterComponent}
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {displayedPlayers.map(player => {
-            const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
-            const categoriasAgrupadas = groupActionsByCategory(playerAcoes);
-            const valoresAcoes = player.acoes_calc || player.acoes;
 
-            return (
-              <div key={player.id} className="bg-gray-900 p-4 rounded-xl border border-gray-800 transition h-fit shadow-lg">
-                <div className="flex justify-between items-start cursor-pointer hover:bg-gray-800/50 p-2 -m-2 rounded transition" onClick={() => toggleExpandPlayer(player.id)}>
-                  <div>
-                    <h4 className="text-lg font-bold flex items-center gap-2">
-                      {player.nome} 
-                      <button onClick={(e) => { e.stopPropagation(); handleEditClick(player); }} className="text-blue-500 bg-blue-900/20 rounded p-1 text-xs hover:bg-blue-500 hover:text-white transition">✏️ Editar</button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id, player.nome); }} className="text-red-500 bg-red-900/20 rounded p-1 text-xs hover:bg-red-500 hover:text-white transition">🗑️</button>
-                    </h4>
-                    <p className="text-xs text-blue-400 font-bold mt-1">{player.time_nome} • <span className="text-gray-400">{player.categoria}</span></p>
-                    <p className="text-xs text-green-400 font-bold mt-1">{player.setor}</p>
-                  </div>
-                  <span className="text-blue-500 font-bold mt-2 text-xs bg-blue-900/20 px-2 py-1 rounded">
-                    {expandedPlayers.includes(player.id) ? 'Ocultar ▲' : 'Estatísticas ▼'}
-                  </span>
+        {/* Barra de Pesquisa por Nome */}
+        <div className="bg-gray-900 p-3 rounded-xl border border-gray-800 flex items-center gap-3">
+          <span className="text-gray-400 pl-2">🔍</span>
+          <input
+            type="text"
+            placeholder="Pesquisar atleta pelo nome..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-transparent text-sm text-white outline-none font-bold placeholder:font-normal placeholder:text-gray-500"
+          />
+          <span className="text-xs font-mono text-gray-400 bg-gray-950 px-2.5 py-1 rounded border border-gray-800 whitespace-nowrap">
+            {finalPlayers.length} {finalPlayers.length === 1 ? 'atleta' : 'atletas'}
+          </span>
+        </div>
+        
+        {/* Grelha de Cartões de Redirecionamento */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {finalPlayers.map(player => (
+            <div
+              key={player.id}
+              onClick={() => onSelectPlayer(player.id)}
+              className="bg-gray-900 hover:bg-gray-800/80 p-5 rounded-xl border border-gray-800 hover:border-blue-500/60 transition-all cursor-pointer shadow-lg group flex justify-between items-center"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-blue-900/30 border border-blue-800/50 flex items-center justify-center text-blue-400 font-black text-base group-hover:bg-blue-600 group-hover:text-white transition">
+                  {player.nome.substring(0, 2).toUpperCase()}
                 </div>
-                
-                {expandedPlayers.includes(player.id) && (
-                  <div className="mt-4 space-y-4 pt-4 border-t border-gray-800">
-                    {Object.keys(categoriasAgrupadas).map(catName => (
-                      <div key={catName} className="bg-gray-950 p-3 rounded-lg border border-gray-800">
-                        <h5 className="text-[10px] uppercase font-black text-blue-500 mb-2 tracking-widest border-b border-gray-800 pb-1">{catName}</h5>
-                        <div className="grid grid-cols-1 gap-1">
-                          {categoriasAgrupadas[catName].map(acao => (
-                            <div key={acao.id} className="flex justify-between items-center px-1 py-1 rounded hover:bg-gray-900/50">
-                              <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
-                              {editingPlayerId === player.id ? (
-                                <input type="number" min="0" value={player.acoes[acao.id] || 0} onChange={(e) => handleSetGlobalAction(player.id, acao.id, e.target.value)} className="w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-xs rounded border border-gray-700 outline-none" />
-                              ) : (
-                                <span className="font-mono text-blue-400 font-bold text-sm pr-1">{valoresAcoes[acao.id] || 0}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div>
+                  <h4 className="text-base font-bold text-white group-hover:text-blue-400 transition">
+                    {player.nome}
+                  </h4>
+                  <p className="text-xs text-blue-400 font-bold mt-0.5">
+                    {player.time_nome} • <span className="text-gray-400">{player.categoria}</span>
+                  </p>
+                  <p className="text-[11px] text-green-400 font-bold mt-1">
+                    {player.setor} {player.funcoes?.length > 0 ? `(${player.funcoes.join(', ')})` : ''}
+                  </p>
+                </div>
               </div>
-            );
-          })}
+
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-xs font-bold text-blue-400 bg-blue-950/60 group-hover:bg-blue-600 group-hover:text-white px-3 py-1.5 rounded-lg border border-blue-800/50 transition whitespace-nowrap">
+                  Ver Perfil ➔
+                </span>
+                <span className="text-[10px] font-mono text-gray-500">
+                  {player.acoes?.partidas || 0} jogos
+                </span>
+              </div>
+            </div>
+          ))}
           
-          {displayedPlayers.length === 0 && (
+          {finalPlayers.length === 0 && (
             <div className="col-span-1 md:col-span-2 text-center py-20 text-gray-500 border border-gray-800 border-dashed rounded-xl">
               Nenhum atleta encontrado com os filtros selecionados.
             </div>
           )}
         </div>
       </div>
+
     </div>
   );
 }

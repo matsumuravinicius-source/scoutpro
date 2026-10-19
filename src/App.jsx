@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Navbar from './components/Navbar';
 import AbaClubes from './components/AbaClubes';
 import AbaBaseDados from './components/AbaBaseDados';
+import PerfilAtleta from './components/PerfilAtleta';
 import AbaLiveMatch from './components/AbaLiveMatch';
 import AbaHistorico from './components/AbaHistorico';
 import AbaAnalise from './components/AbaAnalise';
@@ -79,6 +80,9 @@ export default function App() {
   const [session, setSession] = useState(null);
 
   const [activeTab, setActiveTab] = useState('scout');
+  // NOVO ESTADO: Controla qual atleta está com a página de perfil aberta
+  const [selectedPlayerProfileId, setSelectedPlayerProfileId] = useState(null);
+
   const [teams, setTeams] = useState([]);
   const [players, setPlayers] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
@@ -89,8 +93,6 @@ export default function App() {
   const [filterTeam, setFilterTeam] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
-  const [editingPlayerId, setEditingPlayerId] = useState(null);
-  const [expandedPlayers, setExpandedPlayers] = useState([]); 
   const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
   const [matchCompetition, setMatchCompetition] = useState(''); 
@@ -111,7 +113,6 @@ export default function App() {
   const [matchTitle, setMatchTitle] = useState('');
   const [matchDate, setMatchDate] = useState('');
   
-  // Estados de Vídeo e Sincronização
   const [matchVideoUrl, setMatchVideoUrl] = useState('');
   const [videoOffsetT1, setVideoOffsetT1] = useState('00:00');
   const [videoOffsetT2, setVideoOffsetT2] = useState('45:00');
@@ -317,27 +318,62 @@ export default function App() {
     const funcoesLimpas = novoJogador.funcoes.filter(f => f.trim() !== '');
     if(funcoesLimpas.length === 0) return alert("Selecione pelo menos uma função.");
     const payload = { nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', setor: novoJogador.setor, funcoes: funcoesLimpas, pe_dominante: novoJogador.pe_dominante, altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null };
-    if (editingPlayerId) {
-      const { data, error } = await supabase.from('jogadores').update(payload).eq('id', editingPlayerId).select();
-      if (error) { alert("Erro: " + error.message); } else if (data) { setPlayers(safePlayers.map(p => p.id === editingPlayerId ? { ...p, ...payload } : p)); cancelarEdicao(); alert("✅ Jogador atualizado!"); }
-    } else {
-      const acoesIniciais = {}; const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
-      listaBase.forEach(a => acoesIniciais[a.id] = 0); payload.acoes = acoesIniciais;
-      const { data, error } = await supabase.from('jogadores').insert([payload]).select();
-      if (error) { alert("Erro: " + error.message); } else if (data) { setPlayers([...safePlayers, data[0]]); cancelarEdicao(); alert("✅ Jogador adicionado!"); }
+    
+    const acoesIniciais = {}; 
+    const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+    listaBase.forEach(a => acoesIniciais[a.id] = 0); 
+    payload.acoes = acoesIniciais;
+    
+    const { data, error } = await supabase.from('jogadores').insert([payload]).select();
+    if (error) { 
+      alert("Erro: " + error.message); 
+    } else if (data) { 
+      setPlayers([...safePlayers, data[0]]); 
+      setNovoJogador({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
+      alert("✅ Jogador adicionado!"); 
     }
   };
 
-  const handleEditClick = (player) => {
-    if (editingPlayerId === player.id) { cancelarEdicao(); return; }
-    setEditingPlayerId(player.id);
-    setNovoJogador({ nome: player.nome, time_nome: player.time_nome, categoria: player.categoria, setor: player.setor || '', funcoes: (player.funcoes?.length > 0) ? player.funcoes : [''], altura: player.altura, pe_dominante: player.pe_dominante, percentual_gordura: player.percentual_gordura, velocidade_maxima: player.velocidade_maxima, ano_nascimento: player.ano_nascimento || '' });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // NOVA FUNÇÃO: Atualiza os dados biométricos diretamente na página de Perfil do Atleta
+  const handleUpdatePlayerBio = async (playerId, updatedFields) => {
+    const funcoesLimpas = (updatedFields.funcoes || []).filter(f => f.trim() !== '');
+    if (funcoesLimpas.length === 0) {
+      alert("Selecione pelo menos uma função.");
+      return false;
+    }
+    const payload = {
+      nome: updatedFields.nome,
+      time_nome: updatedFields.time_nome,
+      categoria: updatedFields.categoria || 'Sem Categoria',
+      setor: updatedFields.setor,
+      funcoes: funcoesLimpas,
+      pe_dominante: updatedFields.pe_dominante,
+      altura: parseFloat(updatedFields.altura) || 0,
+      percentual_gordura: parseFloat(updatedFields.percentual_gordura) || 0,
+      velocidade_maxima: parseFloat(updatedFields.velocidade_maxima) || 0,
+      ano_nascimento: parseInt(updatedFields.ano_nascimento) || null
+    };
+
+    const { error } = await supabase.from('jogadores').update(payload).eq('id', playerId);
+    if (error) {
+      alert("Erro ao atualizar ficha: " + error.message);
+      return false;
+    }
+    setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, ...payload } : p));
+    alert("✅ Ficha do atleta atualizada com sucesso!");
+    return true;
   };
   
-  const cancelarEdicao = () => { setEditingPlayerId(null); setNovoJogador({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' }); };
-  const handleDeletePlayer = async (playerId, playerName) => { if (window.confirm(`Excluir permanentemente "${playerName}"?`)) { const { error } = await supabase.from('jogadores').delete().eq('id', playerId); if (!error) { setPlayers(safePlayers.filter(p => p.id !== playerId)); setMatchSquad(prev => prev.filter(s => s.id !== playerId)); } } };
-  const toggleExpandPlayer = (id) => { setExpandedPlayers(prev => prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]); };
+  const handleDeletePlayer = async (playerId, playerName) => { 
+    if (window.confirm(`Excluir permanentemente "${playerName}"?`)) { 
+      const { error } = await supabase.from('jogadores').delete().eq('id', playerId); 
+      if (!error) { 
+        setPlayers(safePlayers.filter(p => p.id !== playerId)); 
+        setMatchSquad(prev => prev.filter(s => s.id !== playerId)); 
+        if (selectedPlayerProfileId === playerId) setSelectedPlayerProfileId(null);
+      } 
+    } 
+  };
 
   const handleSetGlobalAction = async (playerId, actionId, value) => { const rawValue = value === '' ? '' : Math.max(0, parseInt(value) || 0); const player = safePlayers.find(p => p.id === playerId); const novasAcoesGlobais = { ...player.acoes, [actionId]: rawValue }; setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p)); if (typeof rawValue === 'number') await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId); };
   const handleUpdateGlobalActions = async (playerId, actionId, incrementValue) => { const player = safePlayers.find(p => p.id === playerId); const novoValor = Math.max(0, (parseInt(player.acoes[actionId]) || 0) + incrementValue); const novasAcoesGlobais = { ...player.acoes, [actionId]: novoValor }; setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, acoes: novasAcoesGlobais } : p)); await supabase.from('jogadores').update({ acoes: novasAcoesGlobais }).eq('id', playerId); };
@@ -347,7 +383,24 @@ export default function App() {
   const handleUpdateSquadPlayer = (playerId, field, value) => { if (field === 'titular') { const titularesCount = matchSquad.filter(p => p.titular && p.id !== playerId).length; if (value === true && titularesCount >= 11) { alert("Já existem 11 titulares."); return; } const reservasCount = matchSquad.filter(p => !p.titular && p.id !== playerId).length; if (value === false && reservasCount >= 12) { alert("Já existem 12 reservas."); return; } } setMatchSquad(prev => prev.map(p => p.id === playerId ? { ...p, [field]: value, ...(field === 'titular' ? {inPitch: value} : {}) } : p)); };
   const handlePerformSubstitution = (playerOutId, playerInId) => { if(!playerInId) return; setMatchSquad(prev => prev.map(p => { if (p.id === playerOutId) return { ...p, inPitch: false }; if (p.id === playerInId) return { ...p, inPitch: true }; return p; })); };
 
-  const iniciarPartida = () => { if (!matchCompetition.trim()) return alert("Selecione a Competição."); if (matchSquad.length === 0) return alert("Mínimo 1 atleta."); const titularesCount = matchSquad.filter(p => p.titular).length; if (titularesCount > 11) return alert("Máximo de 11 titulares."); if (!matchTitle.trim()) return alert("Dê um título ao Jogo."); setIsMatchActive(true); setMatchTime(0); setIsTimerRunning(false); setCurrentPeriod(1); setPeriodLogs([]); setMatchEventLog([]); setOpponentGoals(0); setOpponentShots(0); setOpponentFinalThird(0); };
+  const iniciarPartida = () => { 
+    if (!matchCompetition.trim()) return alert("Selecione a Competição."); 
+    if (matchSquad.length === 0) return alert("Mínimo 1 atleta."); 
+    const titularesCount = matchSquad.filter(p => p.titular).length; 
+    if (titularesCount > 11) return alert("Máximo de 11 titulares."); 
+    if (!matchTitle.trim()) return alert("Dê um título ao Jogo."); 
+    
+    setIsMatchActive(true); 
+    setMatchTime(0); 
+    setIsTimerRunning(false); 
+    setCurrentPeriod(1); 
+    setPeriodLogs([]); 
+    setMatchEventLog([]); 
+    setOpponentGoals(0); 
+    setOpponentShots(0); 
+    setOpponentFinalThird(0); 
+  };
+
   const handleFinalizarTempo = () => { if (currentPeriod > 4) return; setPeriodLogs(prev => [...prev, `${currentPeriod}º Tempo: ${formatTime(matchTime)}`]); setIsTimerRunning(false); setMatchTime(0); setCurrentPeriod(prev => prev + 1); };
   const handleOpponentAction = (type, increment) => { if (increment > 0) { let nomeAcao = ''; if(type === 'golo') nomeAcao = 'Golo Marcado'; if(type === 'finalizacao') nomeAcao = 'Finalização'; if(type === 'ultimo_terco') nomeAcao = 'Entrada no Último Terço'; setMatchEventLog(logs => [`[T${currentPeriod} - ${formatTime(matchTime)}] Adversário • ${nomeAcao}`, ...logs]); } if (type === 'golo') setOpponentGoals(prev => Math.max(0, prev + increment)); if (type === 'finalizacao') setOpponentShots(prev => Math.max(0, prev + increment)); if (type === 'ultimo_terco') setOpponentFinalThird(prev => Math.max(0, prev + increment)); };
 
@@ -370,17 +423,9 @@ export default function App() {
     if (incrementValue < 0 && currentMatchVal === 0) return;
     
     const acoesLinhaDoTempo = [
-      'gols', 
-      'cartoes_amarelos', 
-      'cartoes_vermelhos', 
-      'passes_chave', 
-      'defesas', 
-      'defesas_dificeis',
-      'perdas_posse',
-      'erro_passe',
-      'finalizacoes_certas',
-      'finalizacoes_erradas',
-      'passes_frente'
+      'gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 
+      'defesas', 'defesas_dificeis', 'perdas_posse', 'erro_passe',
+      'finalizacoes_certas', 'finalizacoes_erradas', 'passes_frente'
     ];
 
     if (incrementValue > 0 && acoesLinhaDoTempo.includes(actionId)) {
@@ -479,7 +524,7 @@ export default function App() {
   const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
   const renderGlobalFilters = (showDate = false) => (
-    <div className="flex flex-col md:flex-row gap-3 mb-6 bg-gray-900 p-4 rounded-xl border border-gray-800 items-center">
+    <div className="flex flex-col md:flex-row gap-3 mb-4 bg-gray-900 p-4 rounded-xl border border-gray-800 items-center">
       <div className="flex items-center gap-2 text-gray-400 font-bold mr-2 whitespace-nowrap">🔎 Filtros:</div>
       {showDate && (
         <div className="flex items-center gap-2 flex-1 w-full bg-gray-950 p-1 rounded border border-gray-700">
@@ -496,9 +541,24 @@ export default function App() {
 
   if (!session) return <Login />;
 
+  // Procura o objeto do atleta selecionado (já com estatísticas calculadas caso haja filtro de data)
+  const selectedProfilePlayer = safePlayers
+    .map(p => ({
+      ...p,
+      acoes_calc: getComputedStats(p, globalStartDate, globalEndDate)
+    }))
+    .find(p => p.id === selectedPlayerProfileId);
+
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans pb-10">
-      <Navbar session={session} activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar 
+        session={session} 
+        activeTab={activeTab} 
+        setActiveTab={(tab) => {
+          setActiveTab(tab);
+          setSelectedPlayerProfileId(null); // Fecha o perfil individual ao trocar de aba no topo
+        }} 
+      />
       <datalist id="categorias-list">{uniqueCategories.map(c => <option key={c} value={c} />)}</datalist>
 
       {showSectorWarning && (
@@ -515,7 +575,46 @@ export default function App() {
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         {activeTab === 'clubes' && <AbaClubes teams={teams} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} />}
         
-        {activeTab === 'scout' && <AbaBaseDados novoJogador={novoJogador} setNovoJogador={setNovoJogador} teams={teams} handleSavePlayer={handleSavePlayer} editingPlayerId={editingPlayerId} cancelarEdicao={cancelarEdicao} FilterComponent={renderGlobalFilters(true)} displayedPlayers={playersWithCalculatedStats} toggleExpandPlayer={toggleExpandPlayer} handleEditClick={handleEditClick} handleDeletePlayer={handleDeletePlayer} getIdade={getIdade} expandedPlayers={expandedPlayers} SETORES={SETORES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetGlobalAction={handleSetGlobalAction} handleUpdateGlobalActions={handleUpdateGlobalActions} competitions={competitions} newCompetitionName={newCompetitionName} setNewCompetitionName={setNewCompetitionName} handleAddCompetition={handleAddCompetition} handleDeleteCompetition={handleDeleteCompetition} />}
+        {/* SE ESTIVER NA ABA SCOUT: Mostra a Página do Atleta se houver um selecionado, ou o Diretório da Base de Dados */}
+        {activeTab === 'scout' && (
+          selectedProfilePlayer ? (
+            <PerfilAtleta
+              player={selectedProfilePlayer}
+              onBack={() => setSelectedPlayerProfileId(null)}
+              teams={teams}
+              SETORES={SETORES}
+              ACOES_LINHA={ACOES_LINHA}
+              ACOES_GOLEIRO={ACOES_GOLEIRO}
+              handleSetGlobalAction={handleSetGlobalAction}
+              handleUpdateGlobalActions={handleUpdateGlobalActions}
+              handleDeletePlayer={handleDeletePlayer}
+              onUpdatePlayerBio={handleUpdatePlayerBio}
+              matchHistory={safeMatchHistory}
+              isDateInRange={isDateInRange}
+              globalStartDate={globalStartDate}
+              globalEndDate={globalEndDate}
+            />
+          ) : (
+            <AbaBaseDados
+              novoJogador={novoJogador}
+              setNovoJogador={setNovoJogador}
+              teams={teams}
+              handleSavePlayer={handleSavePlayer}
+              FilterComponent={renderGlobalFilters(true)}
+              displayedPlayers={playersWithCalculatedStats}
+              onSelectPlayer={(id) => {
+                setSelectedPlayerProfileId(id);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              SETORES={SETORES}
+              competitions={competitions}
+              newCompetitionName={newCompetitionName}
+              setNewCompetitionName={setNewCompetitionName}
+              handleAddCompetition={handleAddCompetition}
+              handleDeleteCompetition={handleDeleteCompetition}
+            />
+          )
+        )}
         
         {activeTab === 'live' && <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchDate={matchDate} setMatchDate={setMatchDate} matchVideoUrl={matchVideoUrl} setMatchVideoUrl={setMatchVideoUrl} videoOffsetT1={videoOffsetT1} setVideoOffsetT1={setVideoOffsetT1} videoOffsetT2={videoOffsetT2} setVideoOffsetT2={setVideoOffsetT2} matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} matchTeam={matchTeam} setMatchTeam={setMatchTeam} matchCategory={matchCategory} setMatchCategory={setMatchCategory} matchSquad={matchSquad} setMatchSquad={setMatchSquad} handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} teams={teams} players={safePlayers} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />}
         
