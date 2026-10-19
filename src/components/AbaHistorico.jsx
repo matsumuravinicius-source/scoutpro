@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CampoFutebol from './CampoFutebol';
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
@@ -149,6 +150,11 @@ export default function AbaHistorico({
                 <div className="p-4">
                   {partida.dados._meta && (
                      <div className="mb-6 space-y-4">
+                        {partida.dados._meta.fieldEvents?.length > 0 && (
+                          <div className="bg-gray-950 p-4 rounded-lg border border-gray-800">
+                            <CampoFutebol events={partida.dados._meta.fieldEvents} title="Mapa de ações da partida" />
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {partida.dados._meta.periodLogs?.length > 0 && (
                              <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
