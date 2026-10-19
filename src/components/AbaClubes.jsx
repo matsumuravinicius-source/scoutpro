@@ -77,6 +77,20 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
           <button type="button" onClick={() => setSelectedTeam('')} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
         </div>
 
+        <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col md:flex-row items-center gap-3">
+          <span className="text-gray-400 font-bold text-xs uppercase whitespace-nowrap">🔎 Filtrar perfil:</span>
+          <div className="flex items-center gap-2 bg-gray-950 p-2 rounded-lg border border-gray-700 w-full md:flex-1">
+            <label className="text-gray-500 text-xs font-bold uppercase" htmlFor="club-profile-start">De</label>
+            <input id="club-profile-start" type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="bg-transparent outline-none text-sm w-full text-blue-400 font-bold" />
+            <label className="text-gray-500 text-xs font-bold uppercase border-l border-gray-700 pl-2" htmlFor="club-profile-end">Até</label>
+            <input id="club-profile-end" type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="bg-transparent outline-none text-sm w-full text-blue-400 font-bold" />
+          </div>
+          <select aria-label="Filtrar por competição" value={filterCompetition} onChange={event => setFilterCompetition(event.target.value)} className="p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none text-blue-400 font-bold w-full md:w-64">
+            <option value="">Todas as competições</option>
+            {uniqueCompetitions?.map(competition => <option key={competition} value={competition}>{competition}</option>)}
+          </select>
+        </div>
+
         <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
           <h2 className="text-lg font-bold mb-4">Desempenho acumulado</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

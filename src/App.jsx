@@ -573,8 +573,7 @@ export default function App() {
               onUpdatePlayerBio={handleUpdatePlayerBio}
               matchHistory={safeMatchHistory}
               isDateInRange={isDateInRange}
-              globalStartDate={globalStartDate}
-              globalEndDate={globalEndDate}
+              uniqueCompetitions={uniqueCompetitionsHistory}
             />
           ) : (
             <AbaBaseDados
@@ -582,7 +581,7 @@ export default function App() {
               setNovoJogador={setNovoJogador}
               teams={teams}
               handleSavePlayer={handleSavePlayer}
-              FilterComponent={renderGlobalFilters(true)}
+              FilterComponent={renderGlobalFilters(false)}
               displayedPlayers={playersWithCalculatedStats}
               onSelectPlayer={(id) => {
                 setSelectedPlayerProfileId(id);
