@@ -65,6 +65,42 @@ export const isDateInRange = (dateString, startDate, endDate) => {
   return true;
 };
 
+const clockToSeconds = value => {
+  const [minutes = 0, seconds = 0] = (value || '0:0').split(':').map(Number);
+  return minutes * 60 + seconds;
+};
+
+const calculatePlayedMinutes = (squad, eventLog, periodLogs, currentPeriod, currentPeriodSeconds) => {
+  const durations = {};
+  (periodLogs || []).forEach(log => {
+    const match = log.match(/^(\d+)º Tempo:\s*(\d{1,2}:\d{2})$/);
+    if (match) durations[Number(match[1])] = clockToSeconds(match[2]);
+  });
+  if (currentPeriod <= 4) durations[currentPeriod] = Math.max(durations[currentPeriod] || 0, currentPeriodSeconds || 0);
+
+  const playersByName = new Map((squad || []).map(player => [player.nome, player.id]));
+  const substitutions = (eventLog || []).map(line => {
+    const time = line.match(/^\[T(\d+)\s*-\s*(\d{1,2}:\d{2})\].*SAIU\s+(.+?)\s*\|\s*ENTROU\s+(.+)$/);
+    if (!time) return null;
+    return { period: Number(time[1]), seconds: clockToSeconds(time[2]), outId: playersByName.get(time[3].trim()), inId: playersByName.get(time[4].trim()) };
+  }).filter(Boolean).sort((a, b) => a.period - b.period || a.seconds - b.seconds);
+
+  const active = new Set((squad || []).filter(player => player.titular).map(player => player.id));
+  const totals = Object.fromEntries((squad || []).map(player => [player.id, 0]));
+  Object.keys(durations).map(Number).sort((a, b) => a - b).forEach(period => {
+    let cursor = 0;
+    substitutions.filter(event => event.period === period).forEach(event => {
+      const eventSecond = Math.min(durations[period], Math.max(cursor, event.seconds));
+      if (event.outId && active.has(event.outId)) totals[event.outId] += eventSecond - cursor;
+      if (event.outId) active.delete(event.outId);
+      if (event.inId) active.add(event.inId);
+      cursor = eventSecond;
+    });
+    active.forEach(playerId => { totals[playerId] += Math.max(0, durations[period] - cursor); });
+  });
+  return Object.fromEntries(Object.entries(totals).map(([playerId, seconds]) => [playerId, Math.floor(seconds / 60)]));
+};
+
 export default function App() {
   const [session, setSession] = useState(null);
 
@@ -372,6 +408,8 @@ export default function App() {
   const handleUpdateSquadPlayer = (playerId, field, value) => { if (field === 'titular') { const titularesCount = matchSquad.filter(p => p.titular && p.id !== playerId).length; if (value === true && titularesCount >= 11) { alert("Já existem 11 titulares."); return; } const reservasCount = matchSquad.filter(p => !p.titular && p.id !== playerId).length; if (value === false && reservasCount >= 12) { alert("Já existem 12 reservas."); return; } } setMatchSquad(prev => prev.map(p => p.id === playerId ? { ...p, [field]: value, ...(field === 'titular' ? {inPitch: value} : {}) } : p)); };
   const handlePerformSubstitution = (playerOutId, playerInId) => { if(!playerInId) return; setMatchSquad(prev => prev.map(p => { if (p.id === playerOutId) return { ...p, inPitch: false }; if (p.id === playerInId) return { ...p, inPitch: true }; return p; })); };
 
+  const getLivePlayerMinutes = playerId => calculatePlayedMinutes(matchSquad.map(sq => ({ ...sq, nome: safePlayers.find(player => player.id === sq.id)?.nome || '' })), matchEventLog, periodLogs, currentPeriod, matchTime)[playerId] || 0;
+
   const iniciarPartida = () => { 
     if (!matchCompetition.trim()) return alert("Selecione a Competição."); 
     if (matchSquad.length === 0) return alert("Mínimo 1 atleta."); 
@@ -427,7 +465,15 @@ export default function App() {
 
   const encerrarPartida = async () => {
     if (!window.confirm("Salvar o relatório e finalizar esta partida?")) return; setIsTimerRunning(false);
-    const dadosTratados = { ...matchStats }; Object.keys(dadosTratados).forEach(pId => { if (dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
+    const nomesNoElenco = matchSquad.map(sq => ({ ...sq, nome: safePlayers.find(player => player.id === sq.id)?.nome || '' }));
+    const minutosCalculados = calculatePlayedMinutes(nomesNoElenco, matchEventLog, periodLogs, currentPeriod, matchTime);
+    const dadosTratados = { ...matchStats };
+    matchSquad.forEach(sq => {
+      const playerStats = { ...(dadosTratados[sq.id] || {}) };
+      playerStats.minutos = minutosCalculados[sq.id] || 0;
+      if (playerStats.minutos > 0 && !playerStats.partidas) playerStats.partidas = 1;
+      dadosTratados[sq.id] = playerStats;
+    });
     const squadTeams = [...new Set(matchSquad.map(s => safePlayers.find(p => p.id === s.id)?.time_nome).filter(Boolean))];
     
     dadosTratados._meta = { 
@@ -444,6 +490,15 @@ export default function App() {
 
     const { data, error } = await supabase.from('partidas').insert([payload]).select();
     if (!error && data) { 
+        const playersWithUpdatedMinutes = await Promise.all(safePlayers.map(async player => {
+          const minutes = minutosCalculados[player.id];
+          if (minutes === undefined) return player;
+          const previousMinutes = parseInt(player.acoes?.minutos, 10) || 0;
+          const updatedActions = { ...player.acoes, minutos: previousMinutes + minutes };
+          await supabase.from('jogadores').update({ acoes: updatedActions }).eq('id', player.id);
+          return { ...player, acoes: updatedActions };
+        }));
+        setPlayers(playersWithUpdatedMinutes);
         setMatchHistory([data[0], ...safeMatchHistory]); 
         setIsMatchActive(false); 
         setMatchTitle(''); 
@@ -597,7 +652,7 @@ export default function App() {
           )
         )}
         
-        {activeTab === 'live' && <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchDate={matchDate} setMatchDate={setMatchDate} matchVideoUrl={matchVideoUrl} setMatchVideoUrl={setMatchVideoUrl} videoOffsetT1={videoOffsetT1} setVideoOffsetT1={setVideoOffsetT1} videoOffsetT2={videoOffsetT2} setVideoOffsetT2={setVideoOffsetT2} matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} matchTeam={matchTeam} setMatchTeam={setMatchTeam} matchCategory={matchCategory} setMatchCategory={setMatchCategory} matchSquad={matchSquad} setMatchSquad={setMatchSquad} handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} teams={teams} players={safePlayers} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} />}
+        {activeTab === 'live' && <AbaLiveMatch isMatchActive={isMatchActive} matchTitle={matchTitle} setMatchTitle={setMatchTitle} matchDate={matchDate} setMatchDate={setMatchDate} matchVideoUrl={matchVideoUrl} setMatchVideoUrl={setMatchVideoUrl} videoOffsetT1={videoOffsetT1} setVideoOffsetT1={setVideoOffsetT1} videoOffsetT2={videoOffsetT2} setVideoOffsetT2={setVideoOffsetT2} matchCompetition={matchCompetition} setMatchCompetition={setMatchCompetition} competitions={competitions} matchTeam={matchTeam} setMatchTeam={setMatchTeam} matchCategory={matchCategory} setMatchCategory={setMatchCategory} matchSquad={matchSquad} setMatchSquad={setMatchSquad} handleAddToSquad={handleAddToSquad} handleRemoveFromSquad={handleRemoveFromSquad} handleUpdateSquadPlayer={handleUpdateSquadPlayer} handlePerformSubstitution={handlePerformSubstitution} teams={teams} players={safePlayers} iniciarPartida={iniciarPartida} currentPeriod={currentPeriod} formatTime={formatTime} matchTime={matchTime} isTimerRunning={isTimerRunning} setIsTimerRunning={setIsTimerRunning} handleFinalizarTempo={handleFinalizarTempo} opponentGoals={opponentGoals} opponentShots={opponentShots} opponentFinalThird={opponentFinalThird} handleOpponentAction={handleOpponentAction} encerrarPartida={encerrarPartida} matchEventLog={matchEventLog} setMatchEventLog={setMatchEventLog} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} matchStats={matchStats} handleSetLiveAction={handleSetLiveAction} handleLiveAction={handleLiveAction} getLivePlayerMinutes={getLivePlayerMinutes} />}
         
         {activeTab === 'historico' && <AbaHistorico matchHistory={safeMatchHistory} editingMatchId={editingMatchId} editMatchData={editMatchData} setEditMatchData={setEditMatchData} saveMatchEdit={saveMatchEdit} cancelMatchEdit={cancelMatchEdit} handleEditMatchClick={handleEditMatchClick} handleDeleteMatch={handleDeleteMatch} expandedMatch={expandedMatch} setExpandedMatch={setExpandedMatch} players={safePlayers} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} handleSetMatchEditAction={handleSetMatchEditAction} handleUpdateMatchEditAction={handleUpdateMatchEditAction} filterMatchCompetition={filterMatchCompetition} setFilterMatchCompetition={setFilterMatchCompetition} uniqueCompetitions={uniqueCompetitionsHistory} historyStartDate={historyStartDate} setHistoryStartDate={setHistoryStartDate} historyEndDate={historyEndDate} setHistoryEndDate={setHistoryEndDate} isDateInRange={isDateInRange} />}
         

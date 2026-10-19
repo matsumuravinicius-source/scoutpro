@@ -29,7 +29,7 @@ export default function AbaLiveMatch({
   isTimerRunning, setIsTimerRunning, handleFinalizarTempo, 
   opponentGoals, opponentShots, opponentFinalThird, handleOpponentAction, 
   encerrarPartida, matchEventLog, setMatchEventLog, 
-  ACOES_LINHA, ACOES_GOLEIRO, matchStats, handleSetLiveAction, handleLiveAction
+  ACOES_LINHA, ACOES_GOLEIRO, matchStats, handleSetLiveAction, handleLiveAction, getLivePlayerMinutes
 }) {
   
   const [expandedLivePlayers, setExpandedLivePlayers] = useState([]);
@@ -549,7 +549,7 @@ export default function AbaLiveMatch({
                                         <div key={acao.id} className={`flex justify-between items-center bg-gray-900 px-2 py-1.5 rounded border border-gray-800/50 ${['gols', 'cartoes_amarelos', 'cartoes_vermelhos', 'passes_chave', 'defesas_dificeis', 'gols_sofridos'].includes(acao.id) ? 'border-l-2 border-l-blue-500/50' : ''}`}>
                                           <span className="text-xs text-gray-300 truncate pr-2">{acao.nome}</span>
                                           {acao.id === 'minutos' ? (
-                                            <input type="number" min="0" placeholder="0" disabled={isActionDisabled} value={matchStats[sq.id]?.[acao.id] === '' ? '' : (matchStats[sq.id]?.[acao.id] || 0)} onChange={(e) => handleSetLiveAction(sq.id, acao.id, e.target.value)} onBlur={(e) => { if (e.target.value === '') handleSetLiveAction(sq.id, acao.id, '0'); }} className={`w-16 p-1 text-center bg-gray-800 text-blue-400 font-bold text-sm rounded border border-gray-700 outline-none focus:ring-1 focus:ring-blue-500 ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                                            <span className="w-16 text-center font-mono text-blue-400 font-bold text-sm">{getLivePlayerMinutes(sq.id)}'</span>
                                           ) : (
                                             <div className="flex space-x-1 items-center">
                                               <button disabled={isActionDisabled} onClick={(e) => { e.stopPropagation(); handleLiveAction(sq.id, acao.id, -1); }} className={`bg-gray-800 text-gray-400 w-7 h-7 rounded flex items-center justify-center font-bold transition ${isActionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-900/50'}`}>-</button>
