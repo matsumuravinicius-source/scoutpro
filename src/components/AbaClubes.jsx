@@ -1,9 +1,89 @@
 import React, { useState } from 'react';
 
 export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange }) {
+  const [selectedTeam, setSelectedTeam] = useState('');
   const [filterCompetition, setFilterCompetition] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  if (selectedTeam) {
+    const teamPlayers = players.filter(player => player.time_nome === selectedTeam);
+    const teamPlayerIds = teamPlayers.map(player => player.id);
+    const teamMatches = matchHistory.filter(match => {
+      if (!match.dados?._meta?.equipes?.includes(selectedTeam)) return false;
+      if (filterCompetition && match.dados?._meta?.competicao !== filterCompetition) return false;
+      return isDateInRange(match.criado_em, startDate, endDate);
+    });
+    const totals = teamMatches.reduce((acc, match) => {
+      Object.entries(match.dados || {}).forEach(([playerId, stats]) => {
+        if (playerId === '_meta' || !teamPlayerIds.includes(playerId)) return;
+        ['gols', 'assistencias', 'finalizacoes_certas', 'finalizacoes_erradas', 'desarmes', 'cruzamentos', 'cartoes_amarelos', 'cartoes_vermelhos'].forEach(action => {
+          acc[action] += parseInt(stats[action], 10) || 0;
+        });
+      });
+      acc.gols_sofridos += parseInt(match.dados?._meta?.gols_sofridos, 10) || 0;
+      return acc;
+    }, { gols: 0, assistencias: 0, finalizacoes_certas: 0, finalizacoes_erradas: 0, desarmes: 0, cruzamentos: 0, cartoes_amarelos: 0, cartoes_vermelhos: 0, gols_sofridos: 0 });
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-blue-900/40 border border-blue-700 flex items-center justify-center text-3xl">🛡️</div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-widest text-blue-400">Perfil do Clube</span>
+              <h1 className="text-3xl font-black text-white">{selectedTeam}</h1>
+              <p className="text-sm text-gray-400">{teamPlayers.length} atletas · {teamMatches.length} partidas registradas</p>
+            </div>
+          </div>
+          <button type="button" onClick={() => setSelectedTeam('')} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
+        </div>
+
+        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
+          <h2 className="text-lg font-bold mb-4">Desempenho acumulado</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              ['Golos', totals.gols, 'text-blue-400'], ['Golos sofridos', totals.gols_sofridos, 'text-red-400'],
+              ['Assistências', totals.assistencias, 'text-green-400'], ['Finalizações certas', totals.finalizacoes_certas, 'text-green-400'],
+              ['Finalizações erradas', totals.finalizacoes_erradas, 'text-orange-400'], ['Desarmes', totals.desarmes, 'text-white'],
+              ['Cruzamentos', totals.cruzamentos, 'text-white'], ['Cartões amarelos', totals.cartoes_amarelos, 'text-yellow-400'],
+              ['Cartões vermelhos', totals.cartoes_vermelhos, 'text-red-500']
+            ].map(([label, value, color]) => (
+              <div key={label} className="bg-gray-950 p-4 rounded-lg border border-gray-800">
+                <span className="block text-[10px] uppercase font-bold text-gray-500">{label}</span>
+                <span className={`text-2xl font-black font-mono ${color}`}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
+          <h2 className="text-lg font-bold mb-4">Elenco <span className="text-sm text-gray-500">({teamPlayers.length})</span></h2>
+          {teamPlayers.length ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {teamPlayers.map(player => <div key={player.id} className="bg-gray-950 p-4 rounded-lg border border-gray-800">
+              <span className="font-bold text-white">{player.nome}</span>
+              <span className="block text-xs text-blue-400 mt-1">{player.categoria || 'Sem categoria'}</span>
+              <span className="block text-xs text-gray-500 mt-1">{player.setor} · {player.funcoes?.join(', ') || 'Sem função'}</span>
+            </div>)}
+          </div> : <p className="text-sm text-gray-500">Nenhum atleta cadastrado neste clube.</p>}
+        </section>
+
+        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
+          <h2 className="text-lg font-bold mb-4">Histórico de partidas</h2>
+          {teamMatches.length ? <div className="space-y-3">
+            {teamMatches.map(match => <article key={match.id} className="bg-gray-950 p-4 rounded-lg border border-gray-800">
+              <div className="flex flex-col sm:flex-row justify-between gap-1">
+                <h3 className="font-bold text-white">{match.titulo}</h3>
+                <span className="text-xs text-gray-500">{new Date(match.criado_em).toLocaleDateString()}</span>
+              </div>
+              <p className="text-xs text-blue-400 mt-1">{match.dados?._meta?.competicao || 'Sem competição'}</p>
+              <p className="text-xs text-gray-400 mt-2">{match.dados?._meta?.eventLog?.length || 0} eventos registrados</p>
+            </article>)}
+          </div> : <p className="text-sm text-gray-500">Nenhuma partida registrada para este clube.</p>}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -98,7 +178,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                       {/* Célula com o Botão de Lixo */}
                       <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">
                         <div className="flex items-center justify-between gap-2">
-                           <span className="font-bold">{team}</span>
+                           <button type="button" onClick={() => setSelectedTeam(team)} className="font-bold text-left text-blue-300 hover:text-blue-200 hover:underline" title={`Abrir perfil de ${team}`}>{team}</button>
                            <button onClick={() => handleDeleteTeam(team)} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube e Todos os Jogadores">🗑️</button>
                         </div>
                       </td>
