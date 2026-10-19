@@ -4,6 +4,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
   const [selectedTeam, setSelectedTeam] = useState('');
   const [expandedAction, setExpandedAction] = useState('');
   const [activeClip, setActiveClip] = useState(null);
+  const [filterActionId, setFilterActionId] = useState('');
   const [filterCompetition, setFilterCompetition] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -33,6 +34,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
         const startSecond = Math.max(0, offsetSeconds + eventSeconds - 10);
         const matchUrl = meta.videoUrl || '';
         const videoIdMatch = matchUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|live\/))([\w-]{11})/);
+        if (!videoIdMatch) return;
         const clip = {
           id: `${match.id}-${index}`,
           actionName: action.nome,
@@ -48,6 +50,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
         clipsByAction[action.id].clips.push(clip);
       });
     });
+    const actionsWithVideo = Object.values(clipsByAction);
+    const visibleActions = actionsWithVideo.filter(({ action }) => action.id === filterActionId);
     const totals = teamMatches.reduce((acc, match) => {
       Object.entries(match.dados || {}).forEach(([playerId, stats]) => {
         if (playerId === '_meta' || !teamPlayerIds.includes(playerId)) return;
@@ -94,7 +98,15 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
         <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
           <h2 className="text-lg font-bold">Ações e lances</h2>
           <p className="text-xs text-gray-500 mt-1 mb-4">Abra uma ação para ver os eventos do elenco. Cada reprodução começa até 10 segundos antes e termina 10 segundos depois do registro.</p>
-          {Object.keys(clipsByAction).length ? <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          {actionsWithVideo.length ? <>
+          <div className="mb-4 max-w-sm">
+            <label htmlFor="club-action-filter" className="block text-xs font-bold uppercase text-gray-400 mb-1">Filtrar por ação</label>
+            <select id="club-action-filter" value={filterActionId} onChange={event => { setFilterActionId(event.target.value); setExpandedAction(event.target.value); setActiveClip(null); }} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm text-blue-300 outline-none focus:border-blue-500">
+              <option value="">Selecione uma ação...</option>
+              {actionsWithVideo.map(({ action, clips }) => <option key={action.id} value={action.id}>{action.nome} ({clips.length})</option>)}
+            </select>
+          </div>
+          {filterActionId ? <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
             <div className="lg:col-span-8 space-y-2 lg:sticky lg:top-24">
               {activeClip?.videoId ? <>
                 <div className="flex items-start justify-between gap-3">
@@ -106,7 +118,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
             </div>
 
             <div className="lg:col-span-4 max-h-[620px] overflow-y-auto pr-1 space-y-2">
-              {Object.values(clipsByAction).map(({ action, clips }) => (
+              {visibleActions.map(({ action, clips }) => (
                 <div key={action.id} className="rounded-lg border border-gray-800 overflow-hidden">
                   <button type="button" onClick={() => setExpandedAction(expandedAction === action.id ? '' : action.id)} className="w-full flex justify-between items-center gap-3 p-3 text-left bg-gray-950 hover:bg-gray-800/70">
                     <span className="font-bold text-white">{action.nome}</span>
@@ -120,7 +132,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                 </div>
               ))}
             </div>
-          </div> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Ainda não há ações da linha do tempo registradas para este elenco. Os lances aparecem aqui quando são anotados durante a partida ao vivo.</p>}
+          </div> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Selecione uma ação no filtro para carregar os lances.</p>}
+          </> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Nenhuma ação com vídeo disponível para este clube nos filtros selecionados.</p>}
         </section>
 
         <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
