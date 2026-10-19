@@ -30,6 +30,7 @@ export default function AbaHistorico({
   // NOVOS ESTADOS: Filtros de Ação e de Atleta para a Linha do Tempo de cada partida
   const [timelineActionFilter, setTimelineActionFilter] = useState({});
   const [timelinePlayerFilter, setTimelinePlayerFilter] = useState({});
+  const [fieldMapActionFilter, setFieldMapActionFilter] = useState({});
 
   const filteredHistory = matchHistory.filter(m => {
     if (filterMatchCompetition && m.dados?._meta?.competicao !== filterMatchCompetition) return false;
@@ -150,11 +151,22 @@ export default function AbaHistorico({
                 <div className="p-4">
                   {partida.dados._meta && (
                      <div className="mb-6 space-y-4">
-                        {partida.dados._meta.fieldEvents?.length > 0 && (
-                          <div className="bg-gray-950 p-4 rounded-lg border border-gray-800">
-                            <CampoFutebol events={partida.dados._meta.fieldEvents} title="Mapa de ações da partida" />
-                          </div>
-                        )}
+                        {partida.dados._meta.fieldEvents?.length > 0 && (() => {
+                          const fieldEvents = partida.dados._meta.fieldEvents;
+                          const actionFilter = fieldMapActionFilter[partida.id] || '';
+                          const actions = [...new Map(fieldEvents.map(event => [event.actionId, event.label || event.actionId])).entries()];
+                          const visibleEvents = actionFilter ? fieldEvents.filter(event => event.actionId === actionFilter) : fieldEvents;
+                          return <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <h4 className="text-gray-200 font-bold text-sm">Mapa de ações da partida</h4>
+                              <select aria-label="Filtrar mapa por ação" value={actionFilter} onChange={event => setFieldMapActionFilter(prev => ({ ...prev, [partida.id]: event.target.value }))} className="p-2 bg-gray-900 border border-gray-700 rounded text-xs text-blue-300 font-bold">
+                                <option value="">Todas as ações</option>
+                                {actions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                              </select>
+                            </div>
+                            <CampoFutebol events={visibleEvents} title="" />
+                          </div>;
+                        })()}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {partida.dados._meta.periodLogs?.length > 0 && (
                              <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">

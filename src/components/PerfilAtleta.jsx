@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CampoFutebol from './CampoFutebol';
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
@@ -28,6 +29,7 @@ export default function PerfilAtleta({
   const [filtroDataInicio, setFiltroDataInicio] = useState('');
   const [filtroDataFim, setFiltroDataFim] = useState('');
   const [filtroCompeticao, setFiltroCompeticao] = useState('');
+  const [mapaJogoSelecionado, setMapaJogoSelecionado] = useState('');
 
   // Estados da Playlist de Vídeo
   const [selectedActionForVideo, setSelectedActionForVideo] = useState(null);
@@ -59,6 +61,11 @@ export default function PerfilAtleta({
     if (!isDateInRange(m.criado_em, filtroDataInicio, filtroDataFim)) return false;
     return true;
   });
+  const partidasComMapa = partidasDoAtleta.filter(match => match.dados?._meta?.fieldEvents?.some(event => event.playerId === player.id));
+  const acoesNoMapa = partidasComMapa.flatMap(match => match.dados._meta.fieldEvents.filter(event => event.playerId === player.id));
+  const acoesVisiveisNoMapa = mapaJogoSelecionado
+    ? (partidasComMapa.find(match => match.id === mapaJogoSelecionado)?.dados?._meta?.fieldEvents || []).filter(event => event.playerId === player.id)
+    : acoesNoMapa;
 
   // Cálculo dinâmico das estatísticas do atleta com base nos filtros aplicados na página de perfil
   const getStatsFiltrados = () => {
@@ -318,6 +325,17 @@ export default function PerfilAtleta({
           )}
         </div>
       )}
+
+      <section className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div><h2 className="text-lg font-bold text-white">🗺️ Mapa de ações</h2><p className="text-xs text-gray-500">Todas as ações deste atleta registradas no campo.</p></div>
+          <select aria-label="Filtrar mapa por partida" value={mapaJogoSelecionado} onChange={event => setMapaJogoSelecionado(event.target.value)} className="p-2 bg-gray-950 border border-gray-700 rounded text-xs text-blue-300 font-bold w-full sm:w-72">
+            <option value="">Todos os jogos</option>
+            {partidasComMapa.map(match => <option key={match.id} value={match.id}>{match.titulo} · {new Date(match.criado_em).toLocaleDateString()}</option>)}
+          </select>
+        </div>
+        {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" /> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Nenhuma ação de campo registrada para este atleta{mapaJogoSelecionado ? ' nesta partida' : ''}.</p>}
+      </section>
 
       {/* SANFONA DE ESTATÍSTICAS + JOGOS REGISTADOS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
