@@ -35,6 +35,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
         const videoIdMatch = matchUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|live\/))([\w-]{11})/);
         const clip = {
           id: `${match.id}-${index}`,
+          actionName: action.nome,
           matchTitle: match.titulo,
           matchDate: new Date(match.criado_em).toLocaleDateString(),
           eventTime: `T${period} ${parts[2]}`,
@@ -93,27 +94,32 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
         <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
           <h2 className="text-lg font-bold">Ações e lances</h2>
           <p className="text-xs text-gray-500 mt-1 mb-4">Abra uma ação para ver os eventos do elenco. Cada reprodução começa até 10 segundos antes e termina 10 segundos depois do registro.</p>
-          {Object.keys(clipsByAction).length ? <div className="space-y-2">
-            {Object.values(clipsByAction).map(({ action, clips }) => (
-              <div key={action.id} className="rounded-lg border border-gray-800 overflow-hidden">
-                <button type="button" onClick={() => { setExpandedAction(expandedAction === action.id ? '' : action.id); setActiveClip(null); }} className="w-full flex justify-between items-center gap-3 p-3 text-left bg-gray-950 hover:bg-gray-800/70">
-                  <span className="font-bold text-white">{action.nome}</span>
-                  <span className="flex items-center gap-3 text-xs text-blue-400"><span>{clips.length} {clips.length === 1 ? 'lance' : 'lances'}</span><span>{expandedAction === action.id ? '⌃' : '⌄'}</span></span>
-                </button>
-                {expandedAction === action.id && <div className="p-3 space-y-3 bg-gray-950/60">
-                  <div className="space-y-2">
-                    {clips.map(clip => <div key={clip.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-gray-800 bg-gray-950">
-                      <div><span className="block text-sm font-bold text-gray-200">{clip.playerName}</span><span className="block text-xs text-gray-500">{clip.matchTitle} · {clip.matchDate} · {clip.eventTime}</span></div>
-                      <button type="button" disabled={!clip.videoId} onClick={() => setActiveClip(clip)} className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed">{clip.videoId ? '▶ Assistir lance' : 'Vídeo indisponível'}</button>
-                    </div>)}
-                  </div>
-                  {activeClip && clips.some(clip => clip.id === activeClip.id) && <div className="space-y-2">
-                    <div className="flex justify-between items-center gap-2"><h3 className="text-sm font-bold text-blue-300">{activeClip.matchTitle} · {activeClip.playerName}</h3><button type="button" onClick={() => setActiveClip(null)} className="text-xs text-gray-400 hover:text-white">Fechar vídeo ✕</button></div>
-                    <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-800"><iframe key={activeClip.id} className="w-full h-full" src={`https://www.youtube.com/embed/${activeClip.videoId}?start=${activeClip.startSecond}&end=${activeClip.endSecond}&autoplay=1&rel=0`} title={`Lance de ${activeClip.playerName}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
+          {Object.keys(clipsByAction).length ? <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            <div className="lg:col-span-8 space-y-2 lg:sticky lg:top-24">
+              {activeClip?.videoId ? <>
+                <div className="flex items-start justify-between gap-3">
+                  <div><h3 className="font-bold text-white">{activeClip.actionName} · {activeClip.playerName}</h3><p className="text-xs text-gray-500 mt-1">{activeClip.matchTitle} · {activeClip.matchDate} · {activeClip.eventTime}</p></div>
+                  <button type="button" onClick={() => setActiveClip(null)} className="shrink-0 text-xs text-gray-400 hover:text-white">Limpar ✕</button>
+                </div>
+                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-800"><iframe key={activeClip.id} className="w-full h-full" src={`https://www.youtube.com/embed/${activeClip.videoId}?start=${activeClip.startSecond}&end=${activeClip.endSecond}&autoplay=1&rel=0`} title={`Lance de ${activeClip.playerName}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
+              </> : <div className="aspect-video bg-gray-950 rounded-lg border border-gray-800 border-dashed flex flex-col items-center justify-center text-center p-6"><span className="text-4xl mb-3">▶</span><p className="font-bold text-gray-300">Selecione um lance na lista</p><p className="text-xs text-gray-500 mt-1">O vídeo será reproduzido aqui.</p></div>}
+            </div>
+
+            <div className="lg:col-span-4 max-h-[620px] overflow-y-auto pr-1 space-y-2">
+              {Object.values(clipsByAction).map(({ action, clips }) => (
+                <div key={action.id} className="rounded-lg border border-gray-800 overflow-hidden">
+                  <button type="button" onClick={() => setExpandedAction(expandedAction === action.id ? '' : action.id)} className="w-full flex justify-between items-center gap-3 p-3 text-left bg-gray-950 hover:bg-gray-800/70">
+                    <span className="font-bold text-white">{action.nome}</span>
+                    <span className="flex items-center gap-3 text-xs text-blue-400"><span>{clips.length}</span><span>{expandedAction === action.id ? '⌃' : '⌄'}</span></span>
+                  </button>
+                  {expandedAction === action.id && <div className="p-2 space-y-2 bg-gray-950/60">
+                    {clips.map(clip => <button key={clip.id} type="button" disabled={!clip.videoId} onClick={() => setActiveClip(clip)} className={`w-full text-left p-3 rounded-lg border transition ${activeClip?.id === clip.id ? 'border-blue-500 bg-blue-950/40' : 'border-gray-800 bg-gray-950 hover:border-gray-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                      <span className="block text-sm font-bold text-gray-200">{clip.playerName}</span><span className="block text-xs text-gray-500 mt-1">{clip.matchTitle}</span><span className="block text-[10px] text-gray-500 mt-1">{clip.matchDate} · {clip.eventTime}</span>
+                    </button>)}
                   </div>}
-                </div>}
-              </div>
-            ))}
+                </div>
+              ))}
+            </div>
           </div> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Ainda não há ações da linha do tempo registradas para este elenco. Os lances aparecem aqui quando são anotados durante a partida ao vivo.</p>}
         </section>
 
