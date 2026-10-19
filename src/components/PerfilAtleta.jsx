@@ -41,8 +41,40 @@ export default function PerfilAtleta({
     pe_dominante: player?.pe_dominante || 'Destro',
     percentual_gordura: player?.percentual_gordura || '',
     velocidade_maxima: player?.velocidade_maxima || '',
-    ano_nascimento: player?.ano_nascimento || ''
+    ano_nascimento: player?.ano_nascimento || '',
+    foto_perfil: player?.acoes?.foto_perfil || ''
   });
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione um arquivo de imagem.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 10 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const maxSize = 512;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        setEditForm(prev => ({ ...prev, foto_perfil: canvas.toDataURL('image/jpeg', 0.82) }));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (!player) return null;
 
@@ -197,6 +229,17 @@ export default function PerfilAtleta({
           <h3 className="text-lg font-bold text-blue-400 mb-4">✏️ Editar Informações do Atleta</h3>
           <form onSubmit={handleSaveBioSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-3 flex items-center gap-4">
+                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-950 border border-gray-700 flex items-center justify-center text-xl font-black text-blue-400">
+                  {editForm.foto_perfil ? <img src={editForm.foto_perfil} alt="Prévia da foto do atleta" className="w-full h-full object-cover" /> : player.nome.substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Foto do atleta</label>
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="block max-w-full text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:font-bold file:text-white hover:file:bg-blue-500" />
+                  {editForm.foto_perfil && <button type="button" onClick={() => setEditForm(prev => ({ ...prev, foto_perfil: '' }))} className="mt-2 text-xs text-red-400 hover:text-red-300">Remover foto</button>}
+                  <p className="mt-1 text-[10px] text-gray-500">JPG, PNG ou outro formato de imagem; até 10 MB.</p>
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
                 <input type="text" required value={editForm.nome} onChange={e => setEditForm({...editForm, nome: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm font-bold text-white outline-none focus:border-blue-500" />
@@ -281,8 +324,8 @@ export default function PerfilAtleta({
       ) : (
         <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center text-3xl font-black text-white shadow-lg border border-blue-400/30">
-              {player.nome.substring(0, 2).toUpperCase()}
+            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center text-3xl font-black text-white shadow-lg border border-blue-400/30">
+              {player.acoes?.foto_perfil ? <img src={player.acoes.foto_perfil} alt={`Foto de ${player.nome}`} className="w-full h-full object-cover" /> : player.nome.substring(0, 2).toUpperCase()}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">

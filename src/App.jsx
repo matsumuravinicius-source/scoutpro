@@ -229,6 +229,7 @@ export default function App() {
         const acoesBase = {}; 
         const listaRelevante = j.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
         listaRelevante.forEach(a => acoesBase[a.id] = j.acoes?.[a.id] || 0);
+        if (j.acoes?.foto_perfil) acoesBase.foto_perfil = j.acoes.foto_perfil;
         return { ...j, acoes: acoesBase };
       });
       setPlayers(jogadoresFormatados);
@@ -338,7 +339,8 @@ export default function App() {
       altura: parseFloat(updatedFields.altura) || 0,
       percentual_gordura: parseFloat(updatedFields.percentual_gordura) || 0,
       velocidade_maxima: parseFloat(updatedFields.velocidade_maxima) || 0,
-      ano_nascimento: parseInt(updatedFields.ano_nascimento) || null
+      ano_nascimento: parseInt(updatedFields.ano_nascimento) || null,
+      acoes: { ...(safePlayers.find(p => p.id === playerId)?.acoes || {}), foto_perfil: updatedFields.foto_perfil || null }
     };
 
     const { error } = await supabase.from('jogadores').update(payload).eq('id', playerId);
@@ -346,7 +348,7 @@ export default function App() {
       alert("Erro ao atualizar ficha: " + error.message);
       return false;
     }
-    setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, ...payload } : p));
+    setPlayers(safePlayers.map(p => p.id === playerId ? { ...p, ...payload, acoes: payload.acoes } : p));
     alert("✅ Ficha do atleta atualizada com sucesso!");
     return true;
   };
