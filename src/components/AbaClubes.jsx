@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 
-export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange }) {
+export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES }) {
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [expandedAction, setExpandedAction] = useState('');
+  const [activeClip, setActiveClip] = useState(null);
   const [filterCompetition, setFilterCompetition] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -13,6 +15,37 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
       if (!match.dados?._meta?.equipes?.includes(selectedTeam)) return false;
       if (filterCompetition && match.dados?._meta?.competicao !== filterCompetition) return false;
       return isDateInRange(match.criado_em, startDate, endDate);
+    });
+    const teamPlayerNames = new Set(teamPlayers.map(player => player.nome));
+    const clipsByAction = {};
+    teamMatches.forEach(match => {
+      const meta = match.dados?._meta || {};
+      (meta.eventLog || []).forEach((log, index) => {
+        const parts = log.match(/^\[T(\d+)\s*-\s*(\d{2}:\d{2})\]\s*(.*?)\s*•\s*(.+)$/);
+        if (!parts || !teamPlayerNames.has(parts[3].trim())) return;
+        const actionName = parts[4].trim();
+        const action = TODAS_ACOES.find(item => item.nome === actionName);
+        if (!action) return;
+        const period = Number(parts[1]);
+        const eventSeconds = parts[2].split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
+        const offset = (period === 1 ? meta.offsetT1 : meta.offsetT2) || (period === 1 ? '00:00' : '45:00');
+        const offsetSeconds = offset.split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
+        const startSecond = Math.max(0, offsetSeconds + eventSeconds - 10);
+        const matchUrl = meta.videoUrl || '';
+        const videoIdMatch = matchUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|live\/))([\w-]{11})/);
+        const clip = {
+          id: `${match.id}-${index}`,
+          matchTitle: match.titulo,
+          matchDate: new Date(match.criado_em).toLocaleDateString(),
+          eventTime: `T${period} ${parts[2]}`,
+          playerName: parts[3].trim(),
+          startSecond,
+          endSecond: startSecond + 20,
+          videoId: videoIdMatch?.[1] || null
+        };
+        if (!clipsByAction[action.id]) clipsByAction[action.id] = { action, clips: [] };
+        clipsByAction[action.id].clips.push(clip);
+      });
     });
     const totals = teamMatches.reduce((acc, match) => {
       Object.entries(match.dados || {}).forEach(([playerId, stats]) => {
@@ -55,6 +88,33 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
+          <h2 className="text-lg font-bold">Ações e lances</h2>
+          <p className="text-xs text-gray-500 mt-1 mb-4">Abra uma ação para ver os eventos do elenco. Cada reprodução começa até 10 segundos antes e termina 10 segundos depois do registro.</p>
+          {Object.keys(clipsByAction).length ? <div className="space-y-2">
+            {Object.values(clipsByAction).map(({ action, clips }) => (
+              <div key={action.id} className="rounded-lg border border-gray-800 overflow-hidden">
+                <button type="button" onClick={() => { setExpandedAction(expandedAction === action.id ? '' : action.id); setActiveClip(null); }} className="w-full flex justify-between items-center gap-3 p-3 text-left bg-gray-950 hover:bg-gray-800/70">
+                  <span className="font-bold text-white">{action.nome}</span>
+                  <span className="flex items-center gap-3 text-xs text-blue-400"><span>{clips.length} {clips.length === 1 ? 'lance' : 'lances'}</span><span>{expandedAction === action.id ? '⌃' : '⌄'}</span></span>
+                </button>
+                {expandedAction === action.id && <div className="p-3 space-y-3 bg-gray-950/60">
+                  <div className="space-y-2">
+                    {clips.map(clip => <div key={clip.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border border-gray-800 bg-gray-950">
+                      <div><span className="block text-sm font-bold text-gray-200">{clip.playerName}</span><span className="block text-xs text-gray-500">{clip.matchTitle} · {clip.matchDate} · {clip.eventTime}</span></div>
+                      <button type="button" disabled={!clip.videoId} onClick={() => setActiveClip(clip)} className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed">{clip.videoId ? '▶ Assistir lance' : 'Vídeo indisponível'}</button>
+                    </div>)}
+                  </div>
+                  {activeClip && clips.some(clip => clip.id === activeClip.id) && <div className="space-y-2">
+                    <div className="flex justify-between items-center gap-2"><h3 className="text-sm font-bold text-blue-300">{activeClip.matchTitle} · {activeClip.playerName}</h3><button type="button" onClick={() => setActiveClip(null)} className="text-xs text-gray-400 hover:text-white">Fechar vídeo ✕</button></div>
+                    <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-800"><iframe key={activeClip.id} className="w-full h-full" src={`https://www.youtube.com/embed/${activeClip.videoId}?start=${activeClip.startSecond}&end=${activeClip.endSecond}&autoplay=1&rel=0`} title={`Lance de ${activeClip.playerName}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
+                  </div>}
+                </div>}
+              </div>
+            ))}
+          </div> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Ainda não há ações da linha do tempo registradas para este elenco. Os lances aparecem aqui quando são anotados durante a partida ao vivo.</p>}
         </section>
 
         <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
@@ -178,7 +238,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                       {/* Célula com o Botão de Lixo */}
                       <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">
                         <div className="flex items-center justify-between gap-2">
-                           <button type="button" onClick={() => setSelectedTeam(team)} className="font-bold text-left text-blue-300 hover:text-blue-200 hover:underline" title={`Abrir perfil de ${team}`}>{team}</button>
+                           <button type="button" onClick={() => { setSelectedTeam(team); setExpandedAction(''); setActiveClip(null); }} className="font-bold text-left text-blue-300 hover:text-blue-200 hover:underline" title={`Abrir perfil de ${team}`}>{team}</button>
                            <button onClick={() => handleDeleteTeam(team)} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube e Todos os Jogadores">🗑️</button>
                         </div>
                       </td>
