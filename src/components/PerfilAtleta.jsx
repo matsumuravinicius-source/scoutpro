@@ -327,19 +327,30 @@ export default function PerfilAtleta({
       )}
 
       <section className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div><h2 className="text-lg font-bold text-white">🗺️ Mapa de ações</h2><p className="text-xs text-gray-500">Todas as ações deste atleta registradas no campo.</p></div>
-          <select aria-label="Filtrar mapa por partida" value={mapaJogoSelecionado} onChange={event => setMapaJogoSelecionado(event.target.value)} className="p-2 bg-gray-950 border border-gray-700 rounded text-xs text-blue-300 font-bold w-full sm:w-72">
-            <option value="">Todos os jogos</option>
-            {partidasComMapa.map(match => <option key={match.id} value={match.id}>{match.titulo} · {new Date(match.criado_em).toLocaleDateString()}</option>)}
-          </select>
+        <h2 className="text-lg font-bold text-white">🗺️ Mapa de ações e jogos registrados</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <div className="lg:col-span-4">
+            {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" orientation="vertical" /> : <div className="aspect-[68/105] max-h-[520px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">Nenhuma ação de campo registrada{mapaJogoSelecionado ? ' neste jogo' : ' para este atleta'}.</div>}
+          </div>
+          <div className="lg:col-span-8 bg-gray-950 p-3 rounded-lg border border-gray-800">
+            <div className="flex items-center justify-between gap-3 mb-2"><h3 className="text-sm font-bold text-white">Jogos registrados ({partidasDoAtleta.length})</h3>{mapaJogoSelecionado && <button type="button" onClick={() => setMapaJogoSelecionado('')} className="text-xs text-blue-400 hover:text-blue-300">Mostrar todos</button>}</div>
+            <div className="max-h-[520px] overflow-y-auto space-y-2 pr-1">
+              {partidasDoAtleta.map(jogo => {
+                const st = jogo.dados[player.id] || {};
+                return <button key={jogo.id} type="button" onClick={() => setMapaJogoSelecionado(jogo.id)} className={'w-full text-left p-3 rounded-lg border transition ' + (mapaJogoSelecionado === jogo.id ? 'border-blue-500 bg-blue-950/30' : 'border-gray-800 bg-gray-900 hover:border-gray-600')}>
+                  <div className="flex justify-between text-[10px] text-blue-400 font-bold mb-1"><span>{jogo.dados?._meta?.competicao || 'Amigável'}</span><span>{new Date(jogo.criado_em).toLocaleDateString()}</span></div>
+                  <h4 className="font-bold text-sm text-white mb-2">{jogo.titulo}</h4>
+                  <div className="flex gap-3 text-xs font-mono text-gray-400 border-t border-gray-800 pt-2"><span>⏱️ {st.minutos || 0}'</span><span className="text-blue-400">⚽ {st.gols || 0}</span><span className="text-green-400">👟 {st.assistencias || 0}</span></div>
+                </button>;
+              })}
+            </div>
+          </div>
         </div>
-        {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" /> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Nenhuma ação de campo registrada para este atleta{mapaJogoSelecionado ? ' nesta partida' : ''}.</p>}
       </section>
 
       {/* SANFONA DE ESTATÍSTICAS + JOGOS REGISTADOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl space-y-4 h-fit">
+      <div className="grid grid-cols-1 gap-6">
+        <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl space-y-4 h-fit">
           <div className="flex justify-between items-center border-b border-gray-800 pb-3">
             <h2 className="text-xl font-bold text-white">📊 Desempenho & Estatísticas</h2>
             <button onClick={expandirTodas} className="text-xs text-blue-400 font-bold bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800">Expandir / Recolher</button>
@@ -379,28 +390,6 @@ export default function PerfilAtleta({
           </div>
         </div>
 
-        <div className="lg:col-span-1 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl h-fit space-y-4">
-          <h2 className="text-lg font-bold text-white border-b border-gray-800 pb-3">🏟️ Jogos Registados ({partidasDoAtleta.length})</h2>
-          <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
-            {partidasDoAtleta.map(jogo => {
-              const st = jogo.dados[player.id] || {};
-              return (
-                <div key={jogo.id} className="bg-gray-950 p-3.5 rounded-lg border border-gray-800">
-                  <div className="flex justify-between text-[10px] text-blue-400 font-bold mb-1">
-                    <span>{jogo.dados?._meta?.competicao || 'Amigável'}</span>
-                    <span>{new Date(jogo.criado_em).toLocaleDateString()}</span>
-                  </div>
-                  <h4 className="font-bold text-sm text-white mb-2">{jogo.titulo}</h4>
-                  <div className="flex gap-3 text-xs font-mono text-gray-400 border-t border-gray-900 pt-2">
-                    <span>⏱️ {st.minutos || 0}'</span>
-                    <span className="text-blue-400">⚽ {st.gols || 0}</span>
-                    <span className="text-green-400">👟 {st.assistencias || 0}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </div>
   );

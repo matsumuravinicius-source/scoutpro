@@ -151,6 +151,7 @@ export default function AbaHistorico({
                 <div className="p-4">
                   {partida.dados._meta && (
                      <div className="mb-6 space-y-4">
+                        {(partida.dados._meta.fieldEvents?.length > 0 || partida.dados._meta.periodLogs?.length > 0 || partida.dados._meta.gols_sofridos > 0 || partida.dados._meta.finalizacoes_adversario > 0 || partida.dados._meta.ultimo_terco_adversario > 0) && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                         {partida.dados._meta.fieldEvents?.length > 0 && (() => {
                           const fieldEvents = partida.dados._meta.fieldEvents;
                           const actionFilter = fieldMapActionFilter[partida.id] || '';
@@ -164,10 +165,10 @@ export default function AbaHistorico({
                                 {actions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                               </select>
                             </div>
-                            <CampoFutebol events={visibleEvents} title="" />
+                            <div className="max-w-xl"><CampoFutebol events={visibleEvents} title="" orientation="horizontal" /></div>
                           </div>;
                         })()}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-4">
                           {partida.dados._meta.periodLogs?.length > 0 && (
                              <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
                                <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
@@ -183,6 +184,7 @@ export default function AbaHistorico({
                             </div>
                           </div>
                         </div>
+                        </div>}
 
                         {/* GRELHA VÍDEO + LINHA DO TEMPO CLICÁVEL COM FILTROS */}
                         {(ytId || rawLogs.length > 0) && (

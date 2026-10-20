@@ -14,21 +14,27 @@ export const CORES_ACAO_CAMPO = {
   adversario_gol: '#f97316'
 };
 
-export default function CampoFutebol({ events = [], onSelectPoint, title = 'Mapa de ações' }) {
+export default function CampoFutebol({ events = [], onSelectPoint, title = 'Mapa de ações', orientation = 'horizontal' }) {
   const interactive = Boolean(onSelectPoint);
+  const vertical = orientation === 'vertical';
 
   const handleFieldClick = event => {
     if (!interactive) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(105, (event.clientX - bounds.left) / bounds.width * 105));
-    const y = Math.max(0, Math.min(68, (event.clientY - bounds.top) / bounds.height * 68));
+    const x = vertical
+      ? Math.max(0, Math.min(105, (1 - (event.clientY - bounds.top) / bounds.height) * 105))
+      : Math.max(0, Math.min(105, (event.clientX - bounds.left) / bounds.width * 105));
+    const y = vertical
+      ? Math.max(0, Math.min(68, (event.clientX - bounds.left) / bounds.width * 68))
+      : Math.max(0, Math.min(68, (event.clientY - bounds.top) / bounds.height * 68));
     onSelectPoint({ x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) });
   };
 
   return (
     <div>
       {title && <h3 className="text-sm font-bold text-white mb-2">{title}</h3>}
-      <svg viewBox="0 0 105 68" preserveAspectRatio="none" onClick={handleFieldClick} role={interactive ? 'button' : 'img'} aria-label={interactive ? 'Clique no campo para registrar a posição da ação' : 'Mapa do campo com ações registradas'} className={`w-full aspect-[105/68] rounded-lg border border-white/60 bg-emerald-800 ${interactive ? 'cursor-crosshair' : ''}`}>
+      <svg viewBox={vertical ? '0 0 68 105' : '0 0 105 68'} preserveAspectRatio="none" onClick={handleFieldClick} role={interactive ? 'button' : 'img'} aria-label={interactive ? 'Clique no campo para registrar a posição da ação' : 'Mapa do campo com ações registradas'} className={`w-full ${vertical ? 'aspect-[68/105]' : 'aspect-[105/68]'} rounded-lg border border-white/60 bg-emerald-800 ${interactive ? 'cursor-crosshair' : ''}`}>
+        <g transform={vertical ? 'translate(0 105) rotate(-90)' : undefined}>
         <rect x="0.5" y="0.5" width="104" height="67" fill="#166534" stroke="white" strokeWidth="0.5" />
         {/* Marcação tática referencial: funil defensivo entre a baliza e as extremidades da linha de meio-campo. */}
         <polygon points="0,30.3 52.5,0.5 52.5,67.5 0,37.7" fill="#facc15" fillOpacity="0.10" stroke="#fde047" strokeWidth="0.35" strokeDasharray="1.5 1" />
@@ -48,6 +54,7 @@ export default function CampoFutebol({ events = [], onSelectPoint, title = 'Mapa
           <circle cx={point.x} cy={point.y} r="1.35" fill={point.color || CORES_ACAO_CAMPO[point.actionId] || '#fff'} stroke="white" strokeWidth="0.35" />
           {!interactive && <title>{`${point.playerName || 'Adversário'} · ${point.label || point.actionId}`}</title>}
         </g>)}
+        </g>
       </svg>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-300">
         <span className="text-yellow-300">Zona de funil</span>
