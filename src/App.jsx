@@ -208,9 +208,13 @@ export default function App() {
     return true;
   });
 
-  const getComputedStats = (player, startDate, endDate) => {
-    if (!startDate && !endDate) return player.acoes; 
-    const playerMatches = safeMatchHistory.filter(m => isDateInRange(m.criado_em, startDate, endDate) && m.dados && m.dados[player.id]);
+  const getComputedStats = (player, startDate, endDate, competition = '') => {
+    if (!startDate && !endDate && !competition) return player.acoes;
+    const playerMatches = safeMatchHistory.filter(m =>
+      isDateInRange(m.criado_em, startDate, endDate) &&
+      (!competition || m.dados?._meta?.competicao === competition) &&
+      m.dados && m.dados[player.id]
+    );
     const computed = {};
     TODAS_ACOES.forEach(a => computed[a.id] = 0);
     playerMatches.forEach(m => {
@@ -641,7 +645,12 @@ export default function App() {
   const handleDeleteCustomMetric = (id) => { if(!window.confirm("Remover métrica?")) return; const metricList = savedMetrics.filter(m => m.id !== id); setSavedMetrics(metricList); localStorage.setItem('scoutpro_custom_metrics', JSON.stringify(metricList)); if (selectedMetricId === id) setSelectedMetricId(metricList[0]?.id || null); };
   const calculateCustomMetric = (player, metricObj) => { if (!metricObj || !player.acoes_calc) return 0; const num = parseFloat(player.acoes_calc[metricObj.numerador]) || 0; const den = parseFloat(player.acoes_calc[metricObj.denominador]) || 0; return den === 0 ? 0 : (num / den).toFixed(3); };
   const getAnalyzedPlayers = () => { const selectedMetricObj = savedMetrics.find(m => m.id === selectedMetricId); if(!selectedMetricObj) return []; return [...playersWithCalculatedStats].sort((a, b) => calculateCustomMetric(b, selectedMetricObj) - calculateCustomMetric(a, selectedMetricObj)); };
-  const getRankedPlayers = () => [...playersWithCalculatedStats].sort((a, b) => (b.acoes_calc[rankMetric]||0) - (a.acoes_calc[rankMetric]||0));
+  const getRankedPlayers = (competition = '') => displayedPlayers
+    .map(player => ({
+      ...player,
+      acoes_calc: getComputedStats(player, globalStartDate, globalEndDate, competition)
+    }))
+    .sort((a, b) => (b.acoes_calc[rankMetric] || 0) - (a.acoes_calc[rankMetric] || 0));
   const getIdade = (anoNasc) => anoNasc ? `${new Date().getFullYear() - anoNasc} anos | ` : '';
 
   const renderGlobalFilters = (showDate = false) => (
@@ -740,7 +749,7 @@ export default function App() {
         
         {activeTab === 'analise' && <AbaAnalise FilterComponent={renderGlobalFilters(true)} handleSaveCustomMetric={handleSaveCustomMetric} novaMetrica={novaMetrica} setNovaMetrica={setNovaMetrica} TODAS_ACOES={TODAS_ACOES} savedMetrics={savedMetrics} selectedMetricId={selectedMetricId} setSelectedMetricId={setSelectedMetricId} handleDeleteCustomMetric={handleDeleteCustomMetric} getAnalyzedPlayers={getAnalyzedPlayers} calculateCustomMetric={calculateCustomMetric} />}
         
-        {activeTab === 'leaderboard' && <AbaRanking FilterComponent={renderGlobalFilters(true)} rankMetric={rankMetric} setRankMetric={setRankMetric} TODAS_ACOES={TODAS_ACOES} getRankedPlayers={getRankedPlayers} />}
+        {activeTab === 'leaderboard' && <AbaRanking FilterComponent={renderGlobalFilters(true)} rankMetric={rankMetric} setRankMetric={setRankMetric} TODAS_ACOES={TODAS_ACOES} uniqueCompetitions={uniqueCompetitionsHistory} getRankedPlayers={getRankedPlayers} />}
         
         {activeTab === 'comparativo' && <AbaComparativo startDateA={startDateA} setStartDateA={setStartDateA} endDateA={endDateA} setEndDateA={setEndDateA} filterTeamA={filterTeamA} setFilterTeamA={setFilterTeamA} teams={teams} filterCategoryA={filterCategoryA} setFilterCategoryA={setFilterCategoryA} uniqueCategories={uniqueCategories} filterSectorA={filterSectorA} setFilterSectorA={setFilterSectorA} SETORES={SETORES} compareA={compareA} setCompareA={setCompareA} filteredPlayersA={filteredPlayersA} startDateB={startDateB} setStartDateB={setStartDateB} endDateB={endDateB} setEndDateB={setEndDateB} filterTeamB={filterTeamB} setFilterTeamB={setFilterTeamB} filterCategoryB={filterCategoryB} setFilterCategoryB={setFilterCategoryB} filterSectorB={filterSectorB} setFilterSectorB={setFilterSectorB} compareB={compareB} setCompareB={setCompareB} filteredPlayersB={filteredPlayersB} TODAS_ACOES={TODAS_ACOES} players={safePlayers} getComputedStats={getComputedStats} matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} />}
 
