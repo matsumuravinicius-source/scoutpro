@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
 
 const extractYouTubeId = (url) => {
-  if (!url) return null;
+  if (!url || typeof url !== 'string') return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
   const match = url.match(regExp);
   return (match && match[2].length === 11) ? match[2] : null;
@@ -10,21 +10,32 @@ const extractYouTubeId = (url) => {
 
 const timeToSeconds = (timeStr) => {
   if (!timeStr) return 0;
-  const parts = timeStr.split(':').map(Number);
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  const parts = String(timeStr).split(':').map(Number);
+  if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
   return parts[0] || 0;
 };
 
-export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
+// Travas de segurança (=[] e =() => {}) adicionadas para evitar a tela branca caso o App.jsx não envie alguma propriedade
+export default function AbaClubes({ 
+  teams = [], 
+  players = [], 
+  matchHistory = [], 
+  newTeamName = '', 
+  setNewTeamName = () => {}, 
+  handleAddTeam = () => {}, 
+  handleDeleteTeam = () => {}, 
+  uniqueCompetitions = [], 
+  isDateInRange = () => true, 
+  TODAS_ACOES = [], 
+  onSelectPlayer = () => {} 
+}) {
   const [filterCompetition, setFilterCompetition] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [mapActionFilter, setMapActionFilter] = useState('');
-  
-  // Estado para controlar qual vídeo está a ser reproduzido no momento
   const [activeVideoParams, setActiveVideoParams] = useState(null);
 
   return (
@@ -51,7 +62,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
              </div>
              <select value={filterCompetition} onChange={e => setFilterCompetition(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-xs outline-none text-blue-400 font-bold">
                <option value="">Todas as Competições</option>
-               {uniqueCompetitions?.map(c => <option key={c} value={c}>{c}</option>)}
+               {uniqueCompetitions.map(c => <option key={c} value={c}>{c}</option>)}
              </select>
            </div>
         </div>
@@ -89,8 +100,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                   const allLances = [];
                   
                   teamMatches.forEach(m => {
-                    // Soma de Estatísticas
-                    Object.keys(m.dados).forEach(pId => {
+                    // Proteção de m.dados contra null/undefined (causa comum da tela branca)
+                    Object.keys(m.dados || {}).forEach(pId => {
                       if (pId !== '_meta' && teamPlayerIds.includes(pId)) {
                         const st = m.dados[pId];
                         tGolos += parseInt(st.gols || 0); 
@@ -103,20 +114,19 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                       }
                     });
 
-                    // Extração de Lances para a Linha do Tempo e Vídeo
                     const ytId = extractYouTubeId(m.dados?._meta?.videoUrl);
                     const logs = m.dados?._meta?.eventLog || [];
                     const offsetT1 = timeToSeconds(m.dados?._meta?.offsetT1 || '00:00');
                     const offsetT2 = timeToSeconds(m.dados?._meta?.offsetT2 || '45:00');
 
                     logs.forEach(log => {
+                      if (!log || typeof log !== 'string') return;
                       const matchTime = log.match(/\[T(\d+)\s*-\s*(\d{2}:\d{2})\]/);
                       if (!matchTime) return;
 
                       const actionText = log.split(']')[1]?.trim() || '';
                       const playerName = actionText.split('•')[0]?.trim();
                       
-                      // Mostra na lista apenas lances de jogadores que pertencem a esta equipa
                       if (!teamPlayers.find(p => p.nome === playerName)) return;
 
                       const period = parseInt(matchTime[1]);
@@ -137,23 +147,25 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                   });
                   
                   const tPartidas = teamMatches.length;
-                  const tSofridos = teamMatches.reduce((sum, m) => sum + (m.dados?._meta?.gols_sofridos || 0), 0);
+                  const tSofridos = teamMatches.reduce((sum, m) => sum + (parseInt(m.dados?._meta?.gols_sofridos) || 0), 0);
                   const isExpanded = expandedTeam === team;
 
                   return (
-                    <React.Fragment key={team}>
+                    <React.Fragment key={team || Math.random()}>
                       <tr 
                         onClick={() => {
                           setExpandedTeam(isExpanded ? null : team);
-                          setActiveVideoParams(null); // Fecha o vídeo ao mudar de clube
+                          setActiveVideoParams(null);
                         }}
                         className={`border-b border-gray-800/50 hover:bg-gray-800/40 text-sm cursor-pointer transition ${isExpanded ? 'bg-gray-800/40' : ''}`}
                       >
-                        <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10 flex items-center justify-between gap-2">
-                           <span className="font-bold text-blue-400 group-hover:text-blue-300">
-                             {isExpanded ? '▼' : '▶'} {team}
-                           </span>
-                           <button onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team); }} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube e Todos os Jogadores">🗑️</button>
+                        <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">
+                           <div className="flex items-center justify-between gap-2">
+                             <span className="font-bold text-blue-400 group-hover:text-blue-300">
+                               {isExpanded ? '▼' : '▶'} {team}
+                             </span>
+                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team); }} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube">🗑️</button>
+                           </div>
                         </td>
                         <td className="p-3 text-center font-mono text-gray-300">{tPartidas}</td>
                         <td className="p-3 text-center font-mono text-blue-400 font-bold">{tGolos}</td>
@@ -171,7 +183,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                            <td colSpan="11" className="p-0 border-b border-gray-800 bg-[#0f172a]/50">
                               <div className="p-6 max-w-7xl mx-auto space-y-6">
                                  
-                                 {/* SESSÃO 1: VÍDEO E LISTA DE LANCES ALINHADOS */}
+                                 {/* SESSÃO 1: VÍDEO E LISTA DE LANCES ALINHADOS (FLEX-STRETCH) */}
                                  <div className="flex flex-col lg:flex-row items-stretch gap-4">
                                     <div className="w-full lg:w-2/3 aspect-video bg-gray-950 rounded-xl overflow-hidden border border-gray-800 flex-shrink-0 shadow-lg flex items-center justify-center relative">
                                         {activeVideoParams?.ytId ? (
@@ -237,7 +249,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                                               onClick={(e) => e.stopPropagation()}
                                             >
                                               <option value="">Todas as Ações</option>
-                                              {TODAS_ACOES?.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                                              {TODAS_ACOES.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
                                             </select>
                                         </div>
                                         <div className="flex-1 bg-gray-900 rounded-xl p-2 flex items-center justify-center min-h-[280px] border border-gray-800/60">
