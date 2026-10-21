@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import CampoFutebol from './CampoFutebol';
+import CampoFutebol, { CORES_ACAO_CAMPO } from './CampoFutebol';
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
@@ -14,6 +14,11 @@ const timeToSeconds = (timeStr) => {
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0] || 0;
+};
+
+const parseActionLog = log => {
+  const match = log?.match(/^\[T(\d+)\s*-\s*(\d{1,2}:\d{2})\]\s*(.*?)\s*•\s*(.+)$/);
+  return match ? { period: Number(match[1]), time: match[2], playerName: match[3].trim(), actionName: match[4].trim() } : null;
 };
 
 export default function AbaHistorico({
@@ -53,6 +58,58 @@ export default function AbaHistorico({
     setVideoSeekState(prev => ({ ...prev, [partida.id]: targetSecond }));
   };
 
+  const updateLoggedAction = (logIndex, changes) => setEditMatchData(previous => {
+    if (!previous?.dados?._meta) return previous;
+    const meta = previous.dados._meta;
+    const logs = [...(meta.eventLog || [])];
+    const oldLog = logs[logIndex];
+    const parsed = parseActionLog(oldLog);
+    if (!parsed) return previous;
+    const oldPlayer = players.find(player => player.nome === parsed.playerName);
+    const oldAction = TODAS_ACOES.find(action => action.nome === parsed.actionName);
+    const next = { ...parsed, ...changes };
+    const nextPlayer = players.find(player => player.id === next.playerId) || oldPlayer;
+    const nextAction = TODAS_ACOES.find(action => action.id === next.actionId) || oldAction;
+    if (!nextPlayer || !nextAction) return previous;
+
+    logs[logIndex] = `[T${next.period} - ${next.time}] ${nextPlayer.nome} • ${nextAction.nome}`;
+    let fieldEvents = meta.fieldEvents || [];
+    const fieldEventIndex = fieldEvents.findIndex(event => event.playerId === oldPlayer?.id && event.actionId === oldAction?.id && Number(event.period) === parsed.period && event.time === parsed.time);
+    if (fieldEventIndex >= 0) {
+      fieldEvents = [...fieldEvents];
+      const replacement = { ...fieldEvents[fieldEventIndex] };
+      if (CORES_ACAO_CAMPO[nextAction.id]) {
+        Object.assign(replacement, {
+          playerId: nextPlayer.id,
+          playerName: nextPlayer.nome,
+          actionId: nextAction.id,
+          label: nextAction.nome,
+          period: Number(next.period),
+          time: next.time,
+          color: CORES_ACAO_CAMPO[nextAction.id]
+        });
+        fieldEvents[fieldEventIndex] = replacement;
+      } else {
+        fieldEvents.splice(fieldEventIndex, 1);
+      }
+    }
+    return { ...previous, dados: { ...previous.dados, _meta: { ...meta, eventLog: logs, fieldEvents } } };
+  });
+
+  const removeLoggedAction = logIndex => setEditMatchData(previous => {
+    if (!previous?.dados?._meta) return previous;
+    const meta = previous.dados._meta;
+    const logs = [...(meta.eventLog || [])];
+    const parsed = parseActionLog(logs[logIndex]);
+    const player = parsed && players.find(item => item.nome === parsed.playerName);
+    const action = parsed && TODAS_ACOES.find(item => item.nome === parsed.actionName);
+    logs.splice(logIndex, 1);
+    let fieldEvents = meta.fieldEvents || [];
+    const fieldEventIndex = fieldEvents.findIndex(event => event.playerId === player?.id && event.actionId === action?.id && Number(event.period) === parsed?.period && event.time === parsed?.time);
+    if (fieldEventIndex >= 0) fieldEvents = fieldEvents.filter((_, index) => index !== fieldEventIndex);
+    return { ...previous, dados: { ...previous.dados, _meta: { ...meta, eventLog: logs, fieldEvents } } };
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
@@ -77,7 +134,8 @@ export default function AbaHistorico({
           const currentStartSec = videoSeekState[partida.id] || 0;
 
           // Extração inteligente das Ações e Atletas presentes na Linha do Tempo desta partida
-          const rawLogs = partida.dados?._meta?.eventLog || [];
+          const editingThisMatch = editingMatchId === partida.id;
+          const rawLogs = editingThisMatch ? (editMatchData?.dados?._meta?.eventLog || []) : (partida.dados?._meta?.eventLog || []);
           const selectedAction = timelineActionFilter[partida.id] || '';
           const selectedPlayer = timelinePlayerFilter[partida.id] || '';
 
@@ -96,7 +154,7 @@ export default function AbaHistorico({
           }).filter(Boolean))].sort();
 
           // Filtragem dos eventos da Linha do Tempo
-          const filteredLogs = rawLogs.filter(log => {
+          const filteredLogs = rawLogs.map((log, index) => ({ log, index })).filter(({ log }) => {
             if (selectedAction) {
               if (selectedAction === 'Substituição') {
                 if (!log.includes('Substituição')) return false;
@@ -240,17 +298,38 @@ export default function AbaHistorico({
                                    {filteredLogs.length === 0 ? (
                                      <p className="text-xs text-gray-600 text-center py-8">Nenhum lance encontrado para este filtro.</p>
                                    ) : (
-                                     filteredLogs.map((l, i) => (
-                                       <button
-                                         key={i}
+                                     filteredLogs.map(({ log, index }) => {
+                                       const parsedAction = parseActionLog(log);
+                                       const actionPlayer = parsedAction && players.find(player => player.nome === parsedAction.playerName);
+                                       const actionType = parsedAction && TODAS_ACOES.find(action => action.nome === parsedAction.actionName);
+                                       if (editingThisMatch && parsedAction && actionPlayer && actionType) {
+                                         const playersInMatch = Object.keys(editMatchData.dados).filter(id => id !== '_meta').map(id => players.find(player => player.id === id)).filter(Boolean);
+                                         return <div key={index} className="p-2 bg-gray-900 rounded border border-gray-800 space-y-2">
+                                           <div className="grid grid-cols-2 gap-2">
+                                             <select aria-label="Atleta da ação" value={actionPlayer.id} onChange={event => updateLoggedAction(index, { playerId: event.target.value })} className="min-w-0 p-1.5 bg-gray-950 border border-gray-700 rounded text-xs text-gray-200">
+                                               {playersInMatch.map(player => <option key={player.id} value={player.id}>{player.nome}</option>)}
+                                             </select>
+                                             <select aria-label="Tipo de ação" value={actionType.id} onChange={event => updateLoggedAction(index, { actionId: event.target.value })} className="min-w-0 p-1.5 bg-gray-950 border border-gray-700 rounded text-xs text-blue-300">
+                                               {TODAS_ACOES.map(action => <option key={action.id} value={action.id}>{action.nome}</option>)}
+                                             </select>
+                                             <select aria-label="Tempo da ação" value={parsedAction.period} onChange={event => updateLoggedAction(index, { period: Number(event.target.value) })} className="p-1.5 bg-gray-950 border border-gray-700 rounded text-xs text-gray-300">
+                                               {[1, 2, 3, 4].map(period => <option key={period} value={period}>{period}º Tempo</option>)}
+                                             </select>
+                                             <input aria-label="Minuto da ação" type="text" value={parsedAction.time} onChange={event => { if (/^\d{0,2}(:\d{0,2})?$/.test(event.target.value)) updateLoggedAction(index, { time: event.target.value }); }} placeholder="MM:SS" className="min-w-0 p-1.5 bg-gray-950 border border-gray-700 rounded text-xs font-mono text-gray-300" />
+                                           </div>
+                                           <button type="button" onClick={() => removeLoggedAction(index)} className="text-[10px] font-bold text-red-400 hover:text-red-300">Remover ação</button>
+                                         </div>;
+                                       }
+                                       return <button
+                                         key={index}
                                          type="button"
-                                         onClick={() => handleTimelineClick(partida, l)}
+                                         onClick={() => handleTimelineClick(partida, log)}
                                          className="w-full text-left text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1.5 bg-gray-900/60 hover:bg-blue-900/30 hover:text-white rounded-r transition flex justify-between items-center group"
                                        >
-                                         <span>{l}</span>
+                                         <span>{log}</span>
                                          {ytId && <span className="text-[10px] text-blue-400 opacity-0 group-hover:opacity-100 font-bold pr-2 whitespace-nowrap">▶ Ver</span>}
-                                       </button>
-                                     ))
+                                       </button>;
+                                     })
                                    )}
                                  </div>
                                </div>

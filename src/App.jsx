@@ -573,6 +573,35 @@ export default function App() {
   const saveMatchEdit = async (partidaId) => {
     const originalMatch = safeMatchHistory.find(m => m.id === partidaId); if (!originalMatch) return;
     const dadosTratados = { ...editMatchData.dados }; Object.keys(dadosTratados).forEach(pId => { if (pId !== '_meta' && dadosTratados[pId].minutos === '') dadosTratados[pId].minutos = 0; });
+    const invalidActionTime = (dadosTratados._meta?.eventLog || []).some(line => {
+      const match = line.match(/^\[T\d+\s*-\s*(.*?)\]\s*.*?\s*•\s*(.+)$/);
+      return match && TODAS_ACOES.some(action => action.nome === match[2].trim()) && !/^\d{1,2}:[0-5]\d$/.test(match[1]);
+    });
+    if (invalidActionTime) return alert('Use o formato MM:SS para o minuto de cada ação.');
+    const countLoggedActions = logs => {
+      const counts = {};
+      (logs || []).forEach(line => {
+        const match = line.match(/^\[T\d+\s*-\s*\d{1,2}:\d{2}\]\s*(.*?)\s*•\s*(.+)$/);
+        if (!match) return;
+        const player = safePlayers.find(item => item.nome === match[1].trim());
+        const action = TODAS_ACOES.find(item => item.nome === match[2].trim());
+        if (!player || !action) return;
+        const key = `${player.id}::${action.id}`;
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      return counts;
+    };
+    const originalActionCounts = countLoggedActions(originalMatch.dados?._meta?.eventLog);
+    const editedActionCounts = countLoggedActions(dadosTratados?._meta?.eventLog);
+    new Set([...Object.keys(originalActionCounts), ...Object.keys(editedActionCounts)]).forEach(key => {
+      const [playerId, actionId] = key.split('::');
+      const countDiff = (editedActionCounts[key] || 0) - (originalActionCounts[key] || 0);
+      if (!countDiff || !dadosTratados[playerId]) return;
+      dadosTratados[playerId] = {
+        ...dadosTratados[playerId],
+        [actionId]: Math.max(0, (parseInt(dadosTratados[playerId][actionId], 10) || 0) + countDiff)
+      };
+    });
     const diffs = {}; const allPlayerIds = new Set([...Object.keys(originalMatch.dados).filter(id => id !== '_meta'), ...Object.keys(dadosTratados).filter(id => id !== '_meta')]);
     allPlayerIds.forEach(pId => { const oldStats = originalMatch.dados[pId] || {}; const newStats = dadosTratados[pId] || {}; diffs[pId] = {}; TODAS_ACOES.forEach(acao => { const dif = (parseInt(newStats[acao.id]) || 0) - (parseInt(oldStats[acao.id]) || 0); if (dif !== 0) diffs[pId][acao.id] = dif; }); });
     const { error } = await supabase.from('partidas').update({ titulo: editMatchData.titulo, dados: dadosTratados }).eq('id', partidaId); if (error) return alert("Erro ao salvar.");

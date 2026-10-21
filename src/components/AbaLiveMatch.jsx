@@ -41,10 +41,35 @@ export default function AbaLiveMatch({
   const [ytStartSeconds, setYtStartSeconds] = useState(0);
   const [seekCounter, setSeekCounter] = useState(0); // Força o iframe a atualizar mesmo clicando no mesmo tempo
   const [preRollSeconds, setPreRollSeconds] = useState(3);
+  const [youtubeAutoplay, setYoutubeAutoplay] = useState(false);
   const localVideoRef = useRef(null);
+  const youtubeFrameRef = useRef(null);
 
   const isActionDisabled = matchTime === 0 || currentPeriod > 4;
   const youtubeId = extractYouTubeId(matchVideoUrl);
+  const youtubeOrigin = window.location.origin && window.location.origin !== 'null'
+    ? `&origin=${encodeURIComponent(window.location.origin)}`
+    : '';
+
+  const sendYoutubeCommand = command => {
+    youtubeFrameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func: command, args: '' }),
+      'https://www.youtube.com'
+    );
+  };
+
+  const startTimerAndVideo = () => {
+    if (currentPeriod > 4) return;
+    setIsTimerRunning(true);
+    if (localVideoRef.current) localVideoRef.current.play().catch(() => {});
+    if (youtubeId) sendYoutubeCommand('playVideo');
+  };
+
+  const pauseTimerAndVideo = () => {
+    setIsTimerRunning(false);
+    localVideoRef.current?.pause();
+    if (youtubeId) sendYoutubeCommand('pauseVideo');
+  };
 
   const teamCategories = matchTeam 
     ? [...new Set(players.filter(p => p.time_nome === matchTeam).map(p => p.categoria).filter(Boolean))]
@@ -94,6 +119,7 @@ export default function AbaLiveMatch({
       localVideoRef.current.play();
     } else if (youtubeId) {
       setYtStartSeconds(safeSec);
+      setYoutubeAutoplay(true);
       setSeekCounter(prev => prev + 1);
     }
   };
@@ -276,13 +302,13 @@ export default function AbaLiveMatch({
               <div className="flex gap-2 w-full mb-4">
                 {!isTimerRunning ? (
                   <button 
-                    disabled={currentPeriod > 4} onClick={() => setIsTimerRunning(true)} 
+                    disabled={currentPeriod > 4} onClick={startTimerAndVideo}
                     className={`flex-1 py-3 rounded-lg font-bold text-lg transition shadow-lg ${currentPeriod > 4 ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50' : 'bg-green-600 hover:bg-green-500 text-white'}`}
                   >
                     ▶ Iniciar
                   </button>
                 ) : (
-                  <button onClick={() => setIsTimerRunning(false)} className="flex-1 bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold text-lg transition shadow-lg text-white">
+                  <button onClick={pauseTimerAndVideo} className="flex-1 bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold text-lg transition shadow-lg text-white">
                     ⏸ Pausar
                   </button>
                 )}
@@ -440,9 +466,11 @@ export default function AbaLiveMatch({
               ) : youtubeId ? (
                 <div className="aspect-video w-full bg-black rounded-lg overflow-hidden border border-gray-800">
                   <iframe
+                    ref={youtubeFrameRef}
                     key={`${youtubeId}-${ytStartSeconds}-${seekCounter}`}
                     className="w-full h-full"
-                    src={`https://www.youtube.com/embed/${youtubeId}?start=${ytStartSeconds}&autoplay=1&rel=0`}
+                    src={`https://www.youtube.com/embed/${youtubeId}?start=${ytStartSeconds}&autoplay=${youtubeAutoplay ? 1 : 0}&enablejsapi=1${youtubeOrigin}&rel=0`}
+                    onLoad={() => { if (isTimerRunning || youtubeAutoplay) sendYoutubeCommand('playVideo'); }}
                     title="YouTube video player"
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
