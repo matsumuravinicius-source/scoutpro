@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 // Funções auxiliares de Vídeo e Tempo
 const extractYouTubeId = (url) => {
@@ -44,6 +45,38 @@ export default function AbaLiveMatch({
   const [youtubeAutoplay, setYoutubeAutoplay] = useState(false);
   const localVideoRef = useRef(null);
   const youtubeFrameRef = useRef(null);
+  const [videoPopupWindow, setVideoPopupWindow] = useState(null);
+  const videoPopupRef = useRef(null);
+  const videoPlayerHostRef = useRef(null);
+  const videoInlineSlotRef = useRef(null);
+  const [videoPlayerHost, setVideoPlayerHost] = useState(null);
+
+  const restoreVideoPlayer = () => {
+    if (videoPlayerHostRef.current && videoInlineSlotRef.current) {
+      videoInlineSlotRef.current.appendChild(videoPlayerHostRef.current);
+    }
+  };
+
+  useEffect(() => {
+    if (!videoPopupWindow) return undefined;
+    const closePopupState = () => {
+      restoreVideoPlayer();
+      videoPopupRef.current = null;
+      setVideoPopupWindow(null);
+    };
+    const closeCheck = window.setInterval(() => {
+      if (videoPopupWindow.closed) closePopupState();
+    }, 500);
+    videoPopupWindow.addEventListener('beforeunload', closePopupState);
+    return () => {
+      window.clearInterval(closeCheck);
+      videoPopupWindow.removeEventListener('beforeunload', closePopupState);
+    };
+  }, [videoPopupWindow]);
+
+  useEffect(() => () => {
+    if (videoPopupRef.current && !videoPopupRef.current.closed) videoPopupRef.current.close();
+  }, []);
 
   const isActionDisabled = matchTime === 0 || currentPeriod > 4;
   const youtubeId = extractYouTubeId(matchVideoUrl);
@@ -109,6 +142,75 @@ export default function AbaLiveMatch({
       const url = URL.createObjectURL(file);
       setLocalVideoFileUrl(url);
     }
+  };
+
+  const openVideoInWindow = () => {
+    if (videoPopupWindow && !videoPopupWindow.closed) {
+      videoPopupWindow.focus();
+      return;
+    }
+
+    const popup = window.open('', 'scoutpro-live-match-video', 'popup=yes,width=1280,height=800,resizable=yes');
+    if (!popup) return;
+
+    popup.document.open();
+    popup.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vídeo da partida</title><style>html,body,#scoutpro-video-root{width:100%;height:100%;margin:0;background:#030712}#scoutpro-video-root{display:flex;flex-direction:column;padding:12px;box-sizing:border-box;gap:8px}#scoutpro-video-header{display:flex;justify-content:space-between;align-items:center;color:#e5e7eb;font: bold 14px system-ui,sans-serif;flex-shrink:0}#scoutpro-video-header button{background:#1f2937;color:#f9fafb;border:1px solid #374151;border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:bold}#scoutpro-video-stage{flex:1;min-height:0}</style></head><body><div id="scoutpro-video-root"><header id="scoutpro-video-header"><span id="scoutpro-video-title">Vídeo da partida</span><button id="scoutpro-video-return" type="button">Voltar para a partida</button></header><main id="scoutpro-video-stage"></main></div></body></html>');
+    popup.document.close();
+
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(styleNode => {
+      popup.document.head.appendChild(styleNode.cloneNode(true));
+    });
+    const stage = popup.document.getElementById('scoutpro-video-stage');
+    if (videoPlayerHostRef.current) stage.appendChild(videoPlayerHostRef.current);
+    popup.document.getElementById('scoutpro-video-title').textContent = `📺 ${matchTitle || 'Vídeo da partida'}`;
+    popup.document.getElementById('scoutpro-video-return').addEventListener('click', () => {
+      restoreVideoPlayer();
+      videoPopupRef.current = null;
+      setVideoPopupWindow(null);
+      popup.close();
+    });
+    videoPopupRef.current = popup;
+    setVideoPopupWindow(popup);
+  };
+
+  const closeVideoPopup = () => {
+    const popup = videoPopupRef.current;
+    restoreVideoPlayer();
+    videoPopupRef.current = null;
+    setVideoPopupWindow(null);
+    if (popup && !popup.closed) popup.close();
+  };
+
+  const renderVideoPlayer = () => {
+    const wrapperClass = 'w-full h-full bg-black rounded-lg overflow-hidden border border-gray-800';
+    if (localVideoFileUrl) {
+      return <div className={`relative ${wrapperClass}`}>
+        <video ref={localVideoRef} src={localVideoFileUrl} controls className="w-full h-full object-contain" />
+        <button
+          type="button"
+          onClick={() => setLocalVideoFileUrl(null)}
+          className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded"
+        >Fechar Vídeo Local</button>
+      </div>;
+    }
+    if (youtubeId) {
+      return <div className={wrapperClass}>
+        <iframe
+          ref={youtubeFrameRef}
+          key={`${youtubeId}-${ytStartSeconds}-${seekCounter}`}
+          className="w-full h-full"
+          src={`https://www.youtube.com/embed/${youtubeId}?start=${ytStartSeconds}&autoplay=${youtubeAutoplay ? 1 : 0}&enablejsapi=1${youtubeOrigin}&rel=0`}
+          onLoad={() => { if (isTimerRunning || youtubeAutoplay) sendYoutubeCommand('playVideo'); }}
+          title="YouTube video player"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>;
+    }
+    return <div className="text-center py-6 text-gray-500 text-xs bg-gray-950/50 rounded-lg border border-gray-800 border-dashed">
+      Cole um link do YouTube acima ou carregue um ficheiro de vídeo do seu computador para analisar a partida com vídeo sincronizado.
+    </div>;
   };
 
   // NOVA FUNÇÃO: Salta para qualquer segundo específico no vídeo
@@ -450,38 +552,29 @@ export default function AbaLiveMatch({
                     📁 Ficheiro Local
                     <input type="file" accept="video/*" onChange={handleLocalFileUpload} className="hidden" />
                   </label>
+                  <button
+                    type="button"
+                    onClick={videoPopupWindow ? () => videoPopupWindow.focus() : openVideoInWindow}
+                    className="bg-blue-900/40 hover:bg-blue-800/70 text-xs font-bold text-blue-300 px-3 py-1.5 rounded border border-blue-800/70 transition"
+                    title="Abre o vídeo numa janela que pode ser movida e maximizada noutro monitor"
+                  >{videoPopupWindow ? '↗ Focar janela do vídeo' : '↗ Destacar vídeo'}</button>
                 </div>
               </div>
 
-              {localVideoFileUrl ? (
-                <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-gray-800">
-                  <video ref={localVideoRef} src={localVideoFileUrl} controls className="w-full h-full" />
-                  <button 
-                    onClick={() => setLocalVideoFileUrl(null)} 
-                    className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded"
-                  >
-                    Fechar Vídeo Local
-                  </button>
+              {videoPopupWindow ? (
+                <div className="aspect-video w-full bg-gray-950 rounded-lg border border-gray-800 flex flex-col items-center justify-center gap-2 text-center p-4">
+                  <span className="text-blue-300 font-bold">O vídeo está aberto numa janela separada.</span>
+                  <span className="text-xs text-gray-500">Arraste a janela para outro monitor e maximize-a. O vídeo continua sincronizado com o cronómetro e a linha do tempo.</span>
+                  <button type="button" onClick={() => videoPopupWindow.focus()} className="text-xs font-bold text-blue-400 hover:text-blue-300">Focar janela do vídeo</button>
+                  <button type="button" onClick={closeVideoPopup} className="text-xs font-bold text-gray-400 hover:text-white">Voltar vídeo para esta tela</button>
                 </div>
-              ) : youtubeId ? (
-                <div className="aspect-video w-full bg-black rounded-lg overflow-hidden border border-gray-800">
-                  <iframe
-                    ref={youtubeFrameRef}
-                    key={`${youtubeId}-${ytStartSeconds}-${seekCounter}`}
-                    className="w-full h-full"
-                    src={`https://www.youtube.com/embed/${youtubeId}?start=${ytStartSeconds}&autoplay=${youtubeAutoplay ? 1 : 0}&enablejsapi=1${youtubeOrigin}&rel=0`}
-                    onLoad={() => { if (isTimerRunning || youtubeAutoplay) sendYoutubeCommand('playVideo'); }}
-                    title="YouTube video player"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              ) : (
-                <div className="text-center py-6 text-gray-500 text-xs bg-gray-950/50 rounded-lg border border-gray-800 border-dashed">
-                  Cole um link do YouTube acima ou carregue um ficheiro de vídeo do seu computador para analisar a partida com vídeo sincronizado.
-                </div>
-              )}
+              ) : null}
+              <div ref={videoInlineSlotRef} className={videoPopupWindow ? 'hidden' : 'aspect-video w-full'}>
+                <div ref={node => {
+                  videoPlayerHostRef.current = node;
+                  if (node && node !== videoPlayerHost) setVideoPlayerHost(node);
+                }} className="w-full h-full" />
+              </div>
             </div>
 
             <div>
@@ -699,6 +792,7 @@ export default function AbaLiveMatch({
           </div>
         </div>
       )}
+      {videoPlayerHost && createPortal(renderVideoPlayer(), videoPlayerHost)}
     </div>
   );
 }
