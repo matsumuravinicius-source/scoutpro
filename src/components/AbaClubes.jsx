@@ -1,206 +1,55 @@
 import React, { useState } from 'react';
+import CampoFutebol from './CampoFutebol';
 
-export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES }) {
-  const [selectedTeam, setSelectedTeam] = useState('');
-  const [expandedAction, setExpandedAction] = useState('');
-  const [activeClip, setActiveClip] = useState(null);
-  const [filterActionId, setFilterActionId] = useState('');
+const extractYouTubeId = (url) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
+const timeToSeconds = (timeStr) => {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+};
+
+export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
   const [filterCompetition, setFilterCompetition] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  if (selectedTeam) {
-    const teamPlayers = players.filter(player => player.time_nome === selectedTeam);
-    const teamPlayerIds = teamPlayers.map(player => player.id);
-    const teamMatches = matchHistory.filter(match => {
-      if (!match.dados?._meta?.equipes?.includes(selectedTeam)) return false;
-      if (filterCompetition && match.dados?._meta?.competicao !== filterCompetition) return false;
-      return isDateInRange(match.criado_em, startDate, endDate);
-    });
-    const teamPlayerNames = new Set(teamPlayers.map(player => player.nome));
-    const clipsByAction = {};
-    teamMatches.forEach(match => {
-      const meta = match.dados?._meta || {};
-      (meta.eventLog || []).forEach((log, index) => {
-        const parts = log.match(/^\[T(\d+)\s*-\s*(\d{2}:\d{2})\]\s*(.*?)\s*•\s*(.+)$/);
-        if (!parts || !teamPlayerNames.has(parts[3].trim())) return;
-        const actionName = parts[4].trim();
-        const action = TODAS_ACOES.find(item => item.nome === actionName);
-        if (!action) return;
-        const period = Number(parts[1]);
-        const eventSeconds = parts[2].split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
-        const offset = (period === 1 ? meta.offsetT1 : meta.offsetT2) || (period === 1 ? '00:00' : '45:00');
-        const offsetSeconds = offset.split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
-        const startSecond = Math.max(0, offsetSeconds + eventSeconds - 10);
-        const matchUrl = meta.videoUrl || '';
-        const videoIdMatch = matchUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|live\/))([\w-]{11})/);
-        if (!videoIdMatch) return;
-        const clip = {
-          id: `${match.id}-${index}`,
-          actionName: action.nome,
-          matchTitle: match.titulo,
-          matchDate: new Date(match.criado_em).toLocaleDateString(),
-          eventTime: `T${period} ${parts[2]}`,
-          playerName: parts[3].trim(),
-          startSecond,
-          endSecond: startSecond + 20,
-          videoId: videoIdMatch?.[1] || null
-        };
-        if (!clipsByAction[action.id]) clipsByAction[action.id] = { action, clips: [] };
-        clipsByAction[action.id].clips.push(clip);
-      });
-    });
-    const actionsWithVideo = Object.values(clipsByAction);
-    const visibleActions = actionsWithVideo.filter(({ action }) => action.id === filterActionId);
-    const totals = teamMatches.reduce((acc, match) => {
-      Object.entries(match.dados || {}).forEach(([playerId, stats]) => {
-        if (playerId === '_meta' || !teamPlayerIds.includes(playerId)) return;
-        ['gols', 'assistencias', 'finalizacoes_certas', 'finalizacoes_erradas', 'desarmes', 'cruzamentos', 'cartoes_amarelos', 'cartoes_vermelhos'].forEach(action => {
-          acc[action] += parseInt(stats[action], 10) || 0;
-        });
-      });
-      acc.gols_sofridos += parseInt(match.dados?._meta?.gols_sofridos, 10) || 0;
-      return acc;
-    }, { gols: 0, assistencias: 0, finalizacoes_certas: 0, finalizacoes_erradas: 0, desarmes: 0, cruzamentos: 0, cartoes_amarelos: 0, cartoes_vermelhos: 0, gols_sofridos: 0 });
-
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-blue-900/40 border border-blue-700 flex items-center justify-center text-3xl">🛡️</div>
-            <div>
-              <span className="text-xs font-black uppercase tracking-widest text-blue-400">Perfil do Clube</span>
-              <h1 className="text-3xl font-black text-white">{selectedTeam}</h1>
-              <p className="text-sm text-gray-400">{teamPlayers.length} atletas · {teamMatches.length} partidas registradas</p>
-            </div>
-          </div>
-          <button type="button" onClick={() => setSelectedTeam('')} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
-        </div>
-
-        <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col md:flex-row items-center gap-3">
-          <span className="text-gray-400 font-bold text-xs uppercase whitespace-nowrap">🔎 Filtrar perfil:</span>
-          <div className="flex items-center gap-2 bg-gray-950 p-2 rounded-lg border border-gray-700 w-full md:flex-1">
-            <label className="text-gray-500 text-xs font-bold uppercase" htmlFor="club-profile-start">De</label>
-            <input id="club-profile-start" type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="bg-transparent outline-none text-sm w-full text-blue-400 font-bold" />
-            <label className="text-gray-500 text-xs font-bold uppercase border-l border-gray-700 pl-2" htmlFor="club-profile-end">Até</label>
-            <input id="club-profile-end" type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="bg-transparent outline-none text-sm w-full text-blue-400 font-bold" />
-          </div>
-          <select aria-label="Filtrar por competição" value={filterCompetition} onChange={event => setFilterCompetition(event.target.value)} className="p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none text-blue-400 font-bold w-full md:w-64">
-            <option value="">Todas as competições</option>
-            {uniqueCompetitions?.map(competition => <option key={competition} value={competition}>{competition}</option>)}
-          </select>
-        </div>
-
-        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
-          <h2 className="text-lg font-bold mb-4">Desempenho acumulado</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {[
-              ['Golos', totals.gols, 'text-blue-400'], ['Golos sofridos', totals.gols_sofridos, 'text-red-400'],
-              ['Assistências', totals.assistencias, 'text-green-400'], ['Finalizações certas', totals.finalizacoes_certas, 'text-green-400'],
-              ['Finalizações erradas', totals.finalizacoes_erradas, 'text-orange-400'], ['Desarmes', totals.desarmes, 'text-white'],
-              ['Cruzamentos', totals.cruzamentos, 'text-white'], ['Cartões amarelos', totals.cartoes_amarelos, 'text-yellow-400'],
-              ['Cartões vermelhos', totals.cartoes_vermelhos, 'text-red-500']
-            ].map(([label, value, color]) => (
-              <div key={label} className="bg-gray-950 p-4 rounded-lg border border-gray-800">
-                <span className="block text-[10px] uppercase font-bold text-gray-500">{label}</span>
-                <span className={`text-2xl font-black font-mono ${color}`}>{value}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
-          <h2 className="text-lg font-bold">Ações e lances</h2>
-          <p className="text-xs text-gray-500 mt-1 mb-4">Abra uma ação para ver os eventos do elenco. Cada reprodução começa até 10 segundos antes e termina 10 segundos depois do registro.</p>
-          {actionsWithVideo.length ? <>
-          <div className="mb-4 max-w-sm">
-            <label htmlFor="club-action-filter" className="block text-xs font-bold uppercase text-gray-400 mb-1">Filtrar por ação</label>
-            <select id="club-action-filter" value={filterActionId} onChange={event => { setFilterActionId(event.target.value); setExpandedAction(event.target.value); setActiveClip(null); }} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm text-blue-300 outline-none focus:border-blue-500">
-              <option value="">Selecione uma ação...</option>
-              {actionsWithVideo.map(({ action, clips }) => <option key={action.id} value={action.id}>{action.nome} ({clips.length})</option>)}
-            </select>
-          </div>
-          {filterActionId ? <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-            <div className="lg:col-span-8 space-y-2 lg:sticky lg:top-24">
-              {activeClip?.videoId ? <>
-                <div className="flex items-start justify-between gap-3">
-                  <div><h3 className="font-bold text-white">{activeClip.actionName} · {activeClip.playerName}</h3><p className="text-xs text-gray-500 mt-1">{activeClip.matchTitle} · {activeClip.matchDate} · {activeClip.eventTime}</p></div>
-                  <button type="button" onClick={() => setActiveClip(null)} className="shrink-0 text-xs text-gray-400 hover:text-white">Limpar ✕</button>
-                </div>
-                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-800"><iframe key={activeClip.id} className="w-full h-full" src={`https://www.youtube.com/embed/${activeClip.videoId}?start=${activeClip.startSecond}&end=${activeClip.endSecond}&autoplay=1&rel=0`} title={`Lance de ${activeClip.playerName}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
-              </> : <div className="aspect-video bg-gray-950 rounded-lg border border-gray-800 border-dashed flex flex-col items-center justify-center text-center p-6"><span className="text-4xl mb-3">▶</span><p className="font-bold text-gray-300">Selecione um lance na lista</p><p className="text-xs text-gray-500 mt-1">O vídeo será reproduzido aqui.</p></div>}
-            </div>
-
-            <div className="lg:col-span-4 max-h-[620px] overflow-y-auto pr-1 space-y-2">
-              {visibleActions.map(({ action, clips }) => (
-                <div key={action.id} className="rounded-lg border border-gray-800 overflow-hidden">
-                  <button type="button" onClick={() => setExpandedAction(expandedAction === action.id ? '' : action.id)} className="w-full flex justify-between items-center gap-3 p-3 text-left bg-gray-950 hover:bg-gray-800/70">
-                    <span className="font-bold text-white">{action.nome}</span>
-                    <span className="flex items-center gap-3 text-xs text-blue-400"><span>{clips.length}</span><span>{expandedAction === action.id ? '⌃' : '⌄'}</span></span>
-                  </button>
-                  {expandedAction === action.id && <div className="p-2 space-y-2 bg-gray-950/60">
-                    {clips.map(clip => <button key={clip.id} type="button" disabled={!clip.videoId} onClick={() => setActiveClip(clip)} className={`w-full text-left p-3 rounded-lg border transition ${activeClip?.id === clip.id ? 'border-blue-500 bg-blue-950/40' : 'border-gray-800 bg-gray-950 hover:border-gray-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>
-                      <span className="block text-sm font-bold text-gray-200">{clip.playerName}</span><span className="block text-xs text-gray-500 mt-1">{clip.matchTitle}</span><span className="block text-[10px] text-gray-500 mt-1">{clip.matchDate} · {clip.eventTime}</span>
-                    </button>)}
-                  </div>}
-                </div>
-              ))}
-            </div>
-          </div> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Selecione uma ação no filtro para carregar os lances.</p>}
-          </> : <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-4">Nenhuma ação com vídeo disponível para este clube nos filtros selecionados.</p>}
-        </section>
-
-        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
-          <h2 className="text-lg font-bold mb-4">Elenco <span className="text-sm text-gray-500">({teamPlayers.length})</span></h2>
-          {teamPlayers.length ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {teamPlayers.map(player => <div key={player.id} className="bg-gray-950 p-4 rounded-lg border border-gray-800">
-              <span className="font-bold text-white">{player.nome}</span>
-              <span className="block text-xs text-blue-400 mt-1">{player.categoria || 'Sem categoria'}</span>
-              <span className="block text-xs text-gray-500 mt-1">{player.setor} · {player.funcoes?.join(', ') || 'Sem função'}</span>
-            </div>)}
-          </div> : <p className="text-sm text-gray-500">Nenhum atleta cadastrado neste clube.</p>}
-        </section>
-
-        <section className="bg-gray-900 p-5 rounded-xl border border-gray-800">
-          <h2 className="text-lg font-bold mb-4">Histórico de partidas</h2>
-          {teamMatches.length ? <div className="space-y-3">
-            {teamMatches.map(match => <article key={match.id} className="bg-gray-950 p-4 rounded-lg border border-gray-800">
-              <div className="flex flex-col sm:flex-row justify-between gap-1">
-                <h3 className="font-bold text-white">{match.titulo}</h3>
-                <span className="text-xs text-gray-500">{new Date(match.criado_em).toLocaleDateString()}</span>
-              </div>
-              <p className="text-xs text-blue-400 mt-1">{match.dados?._meta?.competicao || 'Sem competição'}</p>
-              <p className="text-xs text-gray-400 mt-2">{match.dados?._meta?.eventLog?.length || 0} eventos registrados</p>
-            </article>)}
-          </div> : <p className="text-sm text-gray-500">Nenhuma partida registrada para este clube.</p>}
-        </section>
-      </div>
-    );
-  }
+  const [expandedTeam, setExpandedTeam] = useState(null);
+  const [mapActionFilter, setMapActionFilter] = useState('');
+  
+  // Estado para controlar qual vídeo está a ser reproduzido no momento
+  const [activeVideoParams, setActiveVideoParams] = useState(null);
 
   return (
     <div className="space-y-6">
       <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
         <h2 className="text-2xl font-bold mb-2">Gestão de Clubes</h2>
-        <p className="text-sm text-gray-400 mb-6">Adicione ou exclua clubes do sistema.</p>
+        <p className="text-sm text-gray-400 mb-6">Adicione ou exclua clubes do sistema e avalie o desempenho coletivo.</p>
         <form onSubmit={handleAddTeam} className="flex flex-col md:flex-row gap-4">
           <input type="text" placeholder="Nome do Novo Clube" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none focus:border-blue-500" />
           <button type="submit" className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-lg">Adicionar Clube</button>
         </form>
       </div>
 
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-4">
         
-        <div className="flex flex-col lg:flex-row justify-end mb-4 gap-4">
-           <div className="flex items-center gap-2 bg-gray-950 p-1 rounded border border-gray-700">
-             <span className="text-gray-500 text-xs font-bold px-2 uppercase">De:</span>
-             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent outline-none text-sm text-blue-400 font-bold" />
-             <span className="text-gray-500 text-xs font-bold px-2 uppercase border-l border-gray-700">Até:</span>
-             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent outline-none text-sm text-blue-400 font-bold" />
-           </div>
-           <div className="flex items-center gap-2">
-             <span className="text-gray-400 font-bold text-sm">🏆 Competição:</span>
-             <select value={filterCompetition} onChange={e => setFilterCompetition(e.target.value)} className="p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none text-blue-400 font-bold">
+        <div className="flex flex-col lg:flex-row justify-between items-center bg-gray-950 p-3 rounded-lg border border-gray-800 gap-3">
+           <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">🔎 Filtrar Desempenho:</span>
+           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+             <div className="flex items-center gap-2 bg-gray-900 p-1 rounded border border-gray-700">
+               <span className="text-gray-500 text-xs font-bold px-2 uppercase">De:</span>
+               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent outline-none text-xs text-blue-400 font-bold" />
+               <span className="text-gray-500 text-xs font-bold px-2 uppercase border-l border-gray-700">Até:</span>
+               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent outline-none text-xs text-blue-400 font-bold" />
+             </div>
+             <select value={filterCompetition} onChange={e => setFilterCompetition(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-xs outline-none text-blue-400 font-bold">
                <option value="">Todas as Competições</option>
                {uniqueCompetitions?.map(c => <option key={c} value={c}>{c}</option>)}
              </select>
@@ -219,9 +68,8 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                 <th className="p-3 text-center text-green-400">Fin. Certas</th>
                 <th className="p-3 text-center text-orange-400">Fin. Erradas</th>
                 <th className="p-3 text-center">Desarmes</th>
-                <th className="p-3 text-center">Cruzamentos</th>
-                <th className="p-3 text-center text-yellow-400">Cartões Amarelos</th>
-                <th className="p-3 text-center text-red-500">Cartões Vermelhos</th>
+                <th className="p-3 text-center text-yellow-400">C. Amarelos</th>
+                <th className="p-3 text-center text-red-500">C. Vermelhos</th>
               </tr>
             </thead>
             <tbody>
@@ -229,63 +77,226 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                 <tr><td colSpan="11" className="p-6 text-center text-gray-500">Nenhum clube registado.</td></tr>
               ) : (
                 teams.map(team => {
-                  
                   const teamMatches = matchHistory.filter(m => {
                     if (filterCompetition && m.dados?._meta?.competicao !== filterCompetition) return false;
                     if (!isDateInRange(m.criado_em, startDate, endDate)) return false;
                     return m.dados?._meta?.equipes?.includes(team);
                   });
 
-                  const teamPlayerIds = players.filter(p => p.time_nome === team).map(p => p.id);
-                  let tGolos = 0, tAssist = 0, tFinCertas = 0, tFinErradas = 0, tDes = 0, tCruz = 0, tCA = 0, tCV = 0;
+                  const teamPlayers = players.filter(p => p.time_nome === team);
+                  const teamPlayerIds = teamPlayers.map(p => p.id);
+                  let tGolos = 0, tAssist = 0, tFinCertas = 0, tFinErradas = 0, tDes = 0, tCA = 0, tCV = 0;
+                  const allLances = [];
                   
-                  if (filterCompetition || startDate || endDate) {
-                     teamMatches.forEach(m => {
-                       Object.keys(m.dados).forEach(pId => {
-                         if (pId !== '_meta' && teamPlayerIds.includes(pId)) {
-                           const st = m.dados[pId];
-                           tGolos += parseInt(st.gols || 0); tAssist += parseInt(st.assistencias || 0);
-                           tFinCertas += parseInt(st.finalizacoes_certas || 0); tFinErradas += parseInt(st.finalizacoes_erradas || 0);
-                           tDes += parseInt(st.desarmes || 0); tCruz += parseInt(st.cruzamentos || 0);
-                           tCA += parseInt(st.cartoes_amarelos || 0); tCV += parseInt(st.cartoes_vermelhos || 0);
-                         }
-                       });
-                     });
-                  } else {
-                     const teamPlayers = players.filter(p => p.time_nome === team);
-                     tGolos = teamPlayers.reduce((sum, p) => sum + (p.acoes.gols || 0), 0);
-                     tAssist = teamPlayers.reduce((sum, p) => sum + (p.acoes.assistencias || 0), 0);
-                     tFinCertas = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes_certas || 0), 0);
-                     tFinErradas = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes_erradas || 0), 0);
-                     tDes = teamPlayers.reduce((sum, p) => sum + (p.acoes.desarmes || 0), 0);
-                     tCruz = teamPlayers.reduce((sum, p) => sum + (p.acoes.cruzamentos || 0), 0);
-                     tCA = teamPlayers.reduce((sum, p) => sum + (p.acoes.cartoes_amarelos || 0), 0);
-                     tCV = teamPlayers.reduce((sum, p) => sum + (p.acoes.cartoes_vermelhos || 0), 0);
-                  }
+                  teamMatches.forEach(m => {
+                    // Soma de Estatísticas
+                    Object.keys(m.dados).forEach(pId => {
+                      if (pId !== '_meta' && teamPlayerIds.includes(pId)) {
+                        const st = m.dados[pId];
+                        tGolos += parseInt(st.gols || 0); 
+                        tAssist += parseInt(st.assistencias || 0);
+                        tFinCertas += parseInt(st.finalizacoes_certas || 0); 
+                        tFinErradas += parseInt(st.finalizacoes_erradas || 0);
+                        tDes += parseInt(st.desarmes || 0); 
+                        tCA += parseInt(st.cartoes_amarelos || 0); 
+                        tCV += parseInt(st.cartoes_vermelhos || 0);
+                      }
+                    });
+
+                    // Extração de Lances para a Linha do Tempo e Vídeo
+                    const ytId = extractYouTubeId(m.dados?._meta?.videoUrl);
+                    const logs = m.dados?._meta?.eventLog || [];
+                    const offsetT1 = timeToSeconds(m.dados?._meta?.offsetT1 || '00:00');
+                    const offsetT2 = timeToSeconds(m.dados?._meta?.offsetT2 || '45:00');
+
+                    logs.forEach(log => {
+                      const matchTime = log.match(/\[T(\d+)\s*-\s*(\d{2}:\d{2})\]/);
+                      if (!matchTime) return;
+
+                      const actionText = log.split(']')[1]?.trim() || '';
+                      const playerName = actionText.split('•')[0]?.trim();
+                      
+                      // Mostra na lista apenas lances de jogadores que pertencem a esta equipa
+                      if (!teamPlayers.find(p => p.nome === playerName)) return;
+
+                      const period = parseInt(matchTime[1]);
+                      const eventSec = timeToSeconds(matchTime[2]);
+                      const baseOffset = period === 1 ? offsetT1 : offsetT2;
+                      const targetSecond = Math.max(0, baseOffset + eventSec - 3);
+
+                      allLances.push({
+                        logText: actionText,
+                        playerName: playerName,
+                        matchTitle: m.titulo,
+                        date: new Date(m.criado_em).toLocaleDateString(),
+                        timeStr: `T${period} ${matchTime[2]}`,
+                        ytId,
+                        targetSecond
+                      });
+                    });
+                  });
                   
                   const tPartidas = teamMatches.length;
                   const tSofridos = teamMatches.reduce((sum, m) => sum + (m.dados?._meta?.gols_sofridos || 0), 0);
+                  const isExpanded = expandedTeam === team;
 
                   return (
-                    <tr key={team} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
-                      {/* Célula com o Botão de Lixo */}
-                      <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">
-                        <div className="flex items-center justify-between gap-2">
-                           <button type="button" onClick={() => { setSelectedTeam(team); setExpandedAction(''); setActiveClip(null); }} className="font-bold text-left text-blue-300 hover:text-blue-200 hover:underline" title={`Abrir perfil de ${team}`}>{team}</button>
-                           <button onClick={() => handleDeleteTeam(team)} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube e Todos os Jogadores">🗑️</button>
-                        </div>
-                      </td>
-                      <td className="p-3 text-center font-mono text-gray-300">{tPartidas}</td>
-                      <td className="p-3 text-center font-mono text-blue-400 font-bold">{tGolos}</td>
-                      <td className="p-3 text-center font-mono text-red-400 font-bold">{tSofridos}</td>
-                      <td className="p-3 text-center font-mono text-gray-300">{tAssist}</td>
-                      <td className="p-3 text-center font-mono text-green-400">{tFinCertas}</td>
-                      <td className="p-3 text-center font-mono text-orange-400">{tFinErradas}</td>
-                      <td className="p-3 text-center font-mono text-gray-300">{tDes}</td>
-                      <td className="p-3 text-center font-mono text-gray-300">{tCruz}</td>
-                      <td className="p-3 text-center font-mono text-yellow-400">{tCA}</td>
-                      <td className="p-3 text-center font-mono text-red-500">{tCV}</td>
-                    </tr>
+                    <React.Fragment key={team}>
+                      <tr 
+                        onClick={() => {
+                          setExpandedTeam(isExpanded ? null : team);
+                          setActiveVideoParams(null); // Fecha o vídeo ao mudar de clube
+                        }}
+                        className={`border-b border-gray-800/50 hover:bg-gray-800/40 text-sm cursor-pointer transition ${isExpanded ? 'bg-gray-800/40' : ''}`}
+                      >
+                        <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10 flex items-center justify-between gap-2">
+                           <span className="font-bold text-blue-400 group-hover:text-blue-300">
+                             {isExpanded ? '▼' : '▶'} {team}
+                           </span>
+                           <button onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team); }} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube e Todos os Jogadores">🗑️</button>
+                        </td>
+                        <td className="p-3 text-center font-mono text-gray-300">{tPartidas}</td>
+                        <td className="p-3 text-center font-mono text-blue-400 font-bold">{tGolos}</td>
+                        <td className="p-3 text-center font-mono text-red-400 font-bold">{tSofridos}</td>
+                        <td className="p-3 text-center font-mono text-gray-300">{tAssist}</td>
+                        <td className="p-3 text-center font-mono text-green-400">{tFinCertas}</td>
+                        <td className="p-3 text-center font-mono text-orange-400">{tFinErradas}</td>
+                        <td className="p-3 text-center font-mono text-gray-300">{tDes}</td>
+                        <td className="p-3 text-center font-mono text-yellow-400">{tCA}</td>
+                        <td className="p-3 text-center font-mono text-red-500">{tCV}</td>
+                      </tr>
+
+                      {isExpanded && (
+                         <tr>
+                           <td colSpan="11" className="p-0 border-b border-gray-800 bg-[#0f172a]/50">
+                              <div className="p-6 max-w-7xl mx-auto space-y-6">
+                                 
+                                 {/* SESSÃO 1: VÍDEO E LISTA DE LANCES ALINHADOS */}
+                                 <div className="flex flex-col lg:flex-row items-stretch gap-4">
+                                    <div className="w-full lg:w-2/3 aspect-video bg-gray-950 rounded-xl overflow-hidden border border-gray-800 flex-shrink-0 shadow-lg flex items-center justify-center relative">
+                                        {activeVideoParams?.ytId ? (
+                                            <iframe
+                                              key={`${activeVideoParams.ytId}-${activeVideoParams.targetSecond}`}
+                                              className="w-full h-full"
+                                              src={`https://www.youtube.com/embed/${activeVideoParams.ytId}?start=${activeVideoParams.targetSecond}&autoplay=1&rel=0`}
+                                              title="Reprodutor de Lances"
+                                              frameBorder="0"
+                                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                              allowFullScreen
+                                            />
+                                        ) : (
+                                            <div className="text-center text-gray-500 flex flex-col items-center">
+                                                <span className="text-4xl mb-3 text-blue-500 opacity-80">▶️</span>
+                                                <h3 className="font-bold text-white mb-1">Selecione um lance na lista</h3>
+                                                <p className="text-xs">O vídeo será reproduzido aqui.</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="w-full lg:w-1/3 bg-gray-950 rounded-xl border border-gray-800 flex flex-col min-h-0 shadow-inner">
+                                        <div className="p-4 border-b border-gray-800 flex-shrink-0 flex justify-between items-center">
+                                            <h3 className="font-bold text-white text-sm">Ações e Lances</h3>
+                                            <span className="text-[10px] bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded font-mono font-bold">{allLances.length} lances</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                                            {allLances.length === 0 ? (
+                                                <p className="text-xs text-gray-500 text-center py-6">Nenhum lance registado.</p>
+                                            ) : (
+                                                allLances.map((lance, idx) => (
+                                                    <div 
+                                                      key={idx} 
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (lance.ytId) setActiveVideoParams(lance);
+                                                        else alert("Esta partida não possui link de vídeo registado.");
+                                                      }} 
+                                                      className="cursor-pointer bg-gray-900 hover:bg-gray-800 p-3 rounded-lg border border-gray-800 transition group"
+                                                    >
+                                                        <div className="font-bold text-white text-sm flex justify-between">
+                                                            {lance.logText}
+                                                            {!lance.ytId && <span className="text-[10px] text-orange-400">Sem Vídeo</span>}
+                                                        </div>
+                                                        <div className="text-xs text-gray-400 mt-1">{lance.matchTitle}</div>
+                                                        <div className="text-[10px] text-gray-500 mt-1">{lance.date} · {lance.timeStr}</div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                 </div>
+
+                                 {/* SESSÃO 2: MAPA DE AÇÕES (ESQUERDA) E DESEMPENHO (DIREITA) */}
+                                 <div className="flex flex-col lg:flex-row gap-6">
+                                    <div className="w-full lg:w-1/2 bg-gray-950 p-5 rounded-xl border border-gray-800 flex flex-col shadow-inner">
+                                        <div className="flex justify-between items-center border-b border-gray-800 pb-3 mb-4">
+                                            <h3 className="text-lg font-bold text-green-400 flex items-center gap-2">🗺️ Mapa de Ações</h3>
+                                            <select
+                                              value={mapActionFilter}
+                                              onChange={(e) => setMapActionFilter(e.target.value)}
+                                              className="bg-gray-900 border border-gray-700 text-xs rounded-lg p-2 outline-none text-blue-400 font-bold cursor-pointer"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <option value="">Todas as Ações</option>
+                                              {TODAS_ACOES?.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="flex-1 bg-gray-900 rounded-xl p-2 flex items-center justify-center min-h-[280px] border border-gray-800/60">
+                                            <CampoFutebol 
+                                              team={team} 
+                                              matches={teamMatches} 
+                                              filterAction={mapActionFilter} 
+                                              equipe={team} 
+                                              partidas={teamMatches} 
+                                              filtro={mapActionFilter} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="w-full lg:w-1/2 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
+                                        <h3 className="text-lg font-bold text-blue-400 border-b border-gray-800 pb-3 mb-4 flex items-center gap-2">
+                                            📊 Desempenho Acumulado
+                                            <span className="text-[10px] bg-blue-900/30 text-blue-300 px-2 py-0.5 rounded border border-blue-900/50 font-mono">
+                                                {tPartidas} partidas
+                                            </span>
+                                        </h3>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">Golos Pró</span><span className="text-blue-400 font-mono font-black text-lg">{tGolos}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">Golos Sofridos</span><span className="text-red-400 font-mono font-black text-lg">{tSofridos}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">Fin. Certas</span><span className="text-green-400 font-mono font-black text-lg">{tFinCertas}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">Fin. Erradas</span><span className="text-orange-400 font-mono font-black text-lg">{tFinErradas}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">Assistências</span><span className="text-gray-300 font-mono font-black text-lg">{tAssist}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">Desarmes</span><span className="text-gray-300 font-mono font-black text-lg">{tDes}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">C. Amarelos</span><span className="text-yellow-400 font-mono font-black text-lg">{tCA}</span></div>
+                                            <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex justify-between items-center"><span className="text-gray-400 text-[10px] font-bold uppercase">C. Vermelhos</span><span className="text-red-500 font-mono font-black text-lg">{tCV}</span></div>
+                                        </div>
+                                    </div>
+                                 </div>
+
+                                 {/* SESSÃO 3: ELENCO COM CARDS CLICÁVEIS */}
+                                 <div className="bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
+                                    <h3 className="font-bold text-white mb-4 border-b border-gray-800 pb-2">
+                                        Elenco <span className="text-gray-500 text-sm">({teamPlayers.length})</span>
+                                    </h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                        {teamPlayers.map(p => (
+                                            <div 
+                                              key={p.id} 
+                                              onClick={(e) => { e.stopPropagation(); onSelectPlayer(p.id); }} 
+                                              className="bg-gray-900 border border-gray-800 p-4 rounded-xl cursor-pointer hover:border-blue-500 transition-all flex flex-col gap-1 group shadow-sm"
+                                            >
+                                                <h4 className="font-bold text-white group-hover:text-blue-400">{p.nome}</h4>
+                                                <p className="text-xs text-blue-400">{p.categoria}</p>
+                                                <p className="text-[10px] text-gray-500 uppercase mt-1">{p.setor} {p.funcoes?.length > 0 ? `· ${p.funcoes.join(', ')}` : ''}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                 </div>
+
+                              </div>
+                           </td>
+                         </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
