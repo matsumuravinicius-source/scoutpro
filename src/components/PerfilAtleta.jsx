@@ -16,6 +16,26 @@ const timeToSeconds = (timeStr) => {
   return parts[0] || 0;
 };
 
+const readProfilePhoto = file => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+  reader.onload = () => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Não foi possível abrir a imagem selecionada.'));
+    image.onload = () => {
+      const maxDimension = 640;
+      const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
 export default function PerfilAtleta({
   player, onBack, teams, SETORES, ACOES_LINHA, ACOES_GOLEIRO,
   handleSetGlobalAction, handleUpdateGlobalActions, handleDeletePlayer,
@@ -30,6 +50,7 @@ export default function PerfilAtleta({
   const [filtroDataFim, setFiltroDataFim] = useState('');
   const [filtroCompeticao, setFiltroCompeticao] = useState('');
   const [mapaJogoSelecionado, setMapaJogoSelecionado] = useState('');
+  const [mapaAcaoSelecionada, setMapaAcaoSelecionada] = useState('');
 
   // Estados da Playlist de Vídeo
   const [selectedActionForVideo, setSelectedActionForVideo] = useState(null);
@@ -47,7 +68,8 @@ export default function PerfilAtleta({
     pe_dominante: player?.pe_dominante || 'Destro',
     percentual_gordura: player?.percentual_gordura || '',
     velocidade_maxima: player?.velocidade_maxima || '',
-    ano_nascimento: player?.ano_nascimento || ''
+    ano_nascimento: player?.ano_nascimento || '',
+    foto_perfil: player?.acoes?.foto_perfil || ''
   });
 
   if (!player) return null;
@@ -63,9 +85,13 @@ export default function PerfilAtleta({
   });
   const partidasComMapa = partidasDoAtleta.filter(match => match.dados?._meta?.fieldEvents?.some(event => event.playerId === player.id));
   const acoesNoMapa = partidasComMapa.flatMap(match => match.dados._meta.fieldEvents.filter(event => event.playerId === player.id));
-  const acoesVisiveisNoMapa = mapaJogoSelecionado
+  const acoesDoJogoSelecionado = mapaJogoSelecionado
     ? (partidasComMapa.find(match => match.id === mapaJogoSelecionado)?.dados?._meta?.fieldEvents || []).filter(event => event.playerId === player.id)
     : acoesNoMapa;
+  const acoesVisiveisNoMapa = mapaAcaoSelecionada
+    ? acoesDoJogoSelecionado.filter(event => event.actionId === mapaAcaoSelecionada)
+    : acoesDoJogoSelecionado;
+  const tiposDeAcaoNoMapa = [...new Map(acoesNoMapa.map(event => [event.actionId, event.label || event.actionId])).entries()];
 
   // Cálculo dinâmico das estatísticas do atleta com base nos filtros aplicados na página de perfil
   const getStatsFiltrados = () => {
@@ -108,6 +134,28 @@ export default function PerfilAtleta({
     e.preventDefault();
     const sucesso = await onUpdatePlayerBio(player.id, editForm);
     if (sucesso) setIsEditingBio(false);
+  };
+
+  const handleProfilePhotoChange = async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione um arquivo de imagem.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 10 MB.');
+      event.target.value = '';
+      return;
+    }
+    try {
+      const foto_perfil = await readProfilePhoto(file);
+      setEditForm(previous => ({ ...previous, foto_perfil }));
+    } catch (error) {
+      alert(error.message || 'Não foi possível carregar a imagem.');
+    }
+    event.target.value = '';
   };
 
   const getClipsForAction = (acaoObj) => {
@@ -190,7 +238,24 @@ export default function PerfilAtleta({
             {isEditingStats ? '✔️ Concluir Edição' : '📊 Ajustar Estatísticas'}
           </button>
           <button
-            onClick={() => setIsEditingBio(!isEditingBio)}
+            onClick={() => {
+              if (!isEditingBio) {
+                setEditForm({
+                  nome: player.nome || '',
+                  time_nome: player.time_nome || '',
+                  categoria: player.categoria || '',
+                  setor: player.setor || '',
+                  funcoes: player.funcoes?.length ? player.funcoes : [],
+                  altura: player.altura || '',
+                  pe_dominante: player.pe_dominante || 'Destro',
+                  percentual_gordura: player.percentual_gordura || '',
+                  velocidade_maxima: player.velocidade_maxima || '',
+                  ano_nascimento: player.ano_nascimento || '',
+                  foto_perfil: player.acoes?.foto_perfil || ''
+                });
+              }
+              setIsEditingBio(previous => !previous);
+            }}
             className="px-4 py-2 bg-blue-900/20 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg text-xs font-bold border border-blue-900/50 transition"
           >
             {isEditingBio ? 'Cancelar' : '✏️ Editar Ficha'}
@@ -247,15 +312,46 @@ export default function PerfilAtleta({
                 <input type="text" list="categorias-list" required value={editForm.categoria} onChange={e => setEditForm({...editForm, categoria: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
               </div>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pé dominante</label>
+                <select value={editForm.pe_dominante} onChange={e => setEditForm({...editForm, pe_dominante: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none">
+                  <option value="Destro">Destro</option><option value="Canhoto">Canhoto</option><option value="Ambidestro">Ambidestro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Altura (m)</label>
+                <input type="number" min="0" step="0.01" placeholder="1.80" value={editForm.altura} onChange={e => setEditForm({...editForm, altura: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Gordura corporal (%)</label>
+                <input type="number" min="0" step="0.1" placeholder="10.5" value={editForm.percentual_gordura} onChange={e => setEditForm({...editForm, percentual_gordura: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Velocidade máxima (km/h)</label>
+                <input type="number" min="0" step="0.1" placeholder="32.4" value={editForm.velocidade_maxima} onChange={e => setEditForm({...editForm, velocidade_maxima: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ano de nascimento</label>
+                <input type="number" min="1900" max={new Date().getFullYear()} value={editForm.ano_nascimento} onChange={e => setEditForm({...editForm, ano_nascimento: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-gray-950 rounded-lg border border-gray-800">
+              {editForm.foto_perfil ? <img src={editForm.foto_perfil} alt={`Pré-visualização da foto de ${player.nome}`} className="w-20 h-20 object-cover rounded-xl border border-gray-700" /> : <div className="w-20 h-20 rounded-xl bg-gray-900 border border-gray-700 flex items-center justify-center text-2xl font-black text-gray-500">{player.nome.substring(0, 2).toUpperCase()}</div>}
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Foto do atleta</label>
+                <input type="file" accept="image/*" onChange={handleProfilePhotoChange} className="block w-full text-xs text-gray-400 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:font-bold hover:file:bg-blue-500" />
+                <p className="text-[10px] text-gray-500 mt-1">A imagem é redimensionada para caber no perfil. Tamanho máximo: 10 MB.</p>
+              </div>
+              {editForm.foto_perfil && <button type="button" onClick={() => setEditForm(previous => ({ ...previous, foto_perfil: '' }))} className="text-xs font-bold text-red-400 hover:text-red-300">Remover foto</button>}
+            </div>
             <button type="submit" className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition">Salvar Alterações</button>
           </form>
         </div>
       ) : (
         <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center text-3xl font-black text-white shadow-lg border border-blue-400/30">
-              {player.nome.substring(0, 2).toUpperCase()}
-            </div>
+            {player.acoes?.foto_perfil ? <img src={player.acoes.foto_perfil} alt={`Foto de ${player.nome}`} className="w-20 h-20 rounded-2xl object-cover shadow-lg border border-blue-400/30" /> : <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center text-3xl font-black text-white shadow-lg border border-blue-400/30">{player.nome.substring(0, 2).toUpperCase()}</div>}
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-3xl font-black text-white">{player.nome}</h1>
@@ -327,10 +423,16 @@ export default function PerfilAtleta({
       )}
 
       <section className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3">
-        <h2 className="text-lg font-bold text-white">🗺️ Mapa de ações e jogos registrados</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-white">🗺️ Mapa de ações e jogos registrados</h2>
+          <select aria-label="Filtrar mapa por ação" value={mapaAcaoSelecionada} onChange={event => setMapaAcaoSelecionada(event.target.value)} className="w-full sm:w-auto p-2 bg-gray-950 border border-gray-700 rounded-lg text-xs text-blue-300 font-bold">
+            <option value="">Todas as ações ({acoesNoMapa.length})</option>
+            {tiposDeAcaoNoMapa.map(([actionId, label]) => <option key={actionId} value={actionId}>{label} ({acoesNoMapa.filter(event => event.actionId === actionId).length})</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           <div className="lg:col-span-4">
-            {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" orientation="vertical" /> : <div className="aspect-[68/105] max-h-[520px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">Nenhuma ação de campo registrada{mapaJogoSelecionado ? ' neste jogo' : ' para este atleta'}.</div>}
+            {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" orientation="vertical" /> : <div className="aspect-[68/105] max-h-[520px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">{acoesNoMapa.length ? `Nenhuma ação encontrada${mapaJogoSelecionado ? ' neste jogo' : ''} para o filtro selecionado.` : `Nenhuma ação de campo registrada${mapaJogoSelecionado ? ' neste jogo' : ' para este atleta'}.`}</div>}
           </div>
           <div className="lg:col-span-8 bg-gray-950 p-3 rounded-lg border border-gray-800">
             <div className="flex items-center justify-between gap-3 mb-2"><h3 className="text-sm font-bold text-white">Jogos registrados ({partidasDoAtleta.length})</h3>{mapaJogoSelecionado && <button type="button" onClick={() => setMapaJogoSelecionado('')} className="text-xs text-blue-400 hover:text-blue-300">Mostrar todos</button>}</div>
