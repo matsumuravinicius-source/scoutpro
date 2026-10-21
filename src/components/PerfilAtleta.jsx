@@ -375,6 +375,34 @@ export default function PerfilAtleta({
         </div>
       )}
 
+      <section className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-white">🗺️ Mapa de ações e jogos registrados</h2>
+          <select aria-label="Filtrar mapa por ação" value={mapaAcaoSelecionada} onChange={event => setMapaAcaoSelecionada(event.target.value)} className="w-full sm:w-auto p-2 bg-gray-950 border border-gray-700 rounded-lg text-xs text-blue-300 font-bold">
+            <option value="">Todas as ações ({acoesNoMapa.length})</option>
+            {tiposDeAcaoNoMapa.map(([actionId, label]) => <option key={actionId} value={actionId}>{label} ({acoesNoMapa.filter(event => event.actionId === actionId).length})</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <div className="lg:col-span-4">
+            {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" orientation="vertical" /> : <div className="aspect-[68/105] max-h-[520px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">{acoesNoMapa.length ? `Nenhuma ação encontrada${mapaJogoSelecionado ? ' neste jogo' : ''} para o filtro selecionado.` : `Nenhuma ação de campo registrada${mapaJogoSelecionado ? ' neste jogo' : ' para este atleta'}.`}</div>}
+          </div>
+          <div className="lg:col-span-8 bg-gray-950 p-3 rounded-lg border border-gray-800">
+            <div className="flex items-center justify-between gap-3 mb-2"><h3 className="text-sm font-bold text-white">Jogos registrados ({partidasDoAtleta.length})</h3>{mapaJogoSelecionado && <button type="button" onClick={() => setMapaJogoSelecionado('')} className="text-xs text-blue-400 hover:text-blue-300">Mostrar todos</button>}</div>
+            <div className="max-h-[520px] overflow-y-auto space-y-2 pr-1">
+              {partidasDoAtleta.map(jogo => {
+                const st = jogo.dados[player.id] || {};
+                return <button key={jogo.id} type="button" onClick={() => setMapaJogoSelecionado(jogo.id)} className={'w-full text-left p-3 rounded-lg border transition ' + (mapaJogoSelecionado === jogo.id ? 'border-blue-500 bg-blue-950/30' : 'border-gray-800 bg-gray-900 hover:border-gray-600')}>
+                  <div className="flex justify-between text-[10px] text-blue-400 font-bold mb-1"><span>{jogo.dados?._meta?.competicao || 'Amigável'}</span><span>{new Date(jogo.criado_em).toLocaleDateString()}</span></div>
+                  <h4 className="font-bold text-sm text-white mb-2">{jogo.titulo}</h4>
+                  <div className="flex gap-3 text-xs font-mono text-gray-400 border-t border-gray-800 pt-2"><span>⏱️ {st.minutos || 0}'</span><span className="text-blue-400">⚽ {st.gols || 0}</span><span className="text-green-400">👟 {st.assistencias || 0}</span></div>
+                </button>;
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* PLAYLIST DE LANCES EM VÍDEO */}
       {selectedActionForVideo && (
         <div className="bg-gray-900 p-6 rounded-xl border-2 border-blue-500 shadow-2xl space-y-4">
@@ -421,34 +449,6 @@ export default function PerfilAtleta({
           )}
         </div>
       )}
-
-      <section className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-white">🗺️ Mapa de ações e jogos registrados</h2>
-          <select aria-label="Filtrar mapa por ação" value={mapaAcaoSelecionada} onChange={event => setMapaAcaoSelecionada(event.target.value)} className="w-full sm:w-auto p-2 bg-gray-950 border border-gray-700 rounded-lg text-xs text-blue-300 font-bold">
-            <option value="">Todas as ações ({acoesNoMapa.length})</option>
-            {tiposDeAcaoNoMapa.map(([actionId, label]) => <option key={actionId} value={actionId}>{label} ({acoesNoMapa.filter(event => event.actionId === actionId).length})</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          <div className="lg:col-span-4">
-            {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" orientation="vertical" /> : <div className="aspect-[68/105] max-h-[520px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">{acoesNoMapa.length ? `Nenhuma ação encontrada${mapaJogoSelecionado ? ' neste jogo' : ''} para o filtro selecionado.` : `Nenhuma ação de campo registrada${mapaJogoSelecionado ? ' neste jogo' : ' para este atleta'}.`}</div>}
-          </div>
-          <div className="lg:col-span-8 bg-gray-950 p-3 rounded-lg border border-gray-800">
-            <div className="flex items-center justify-between gap-3 mb-2"><h3 className="text-sm font-bold text-white">Jogos registrados ({partidasDoAtleta.length})</h3>{mapaJogoSelecionado && <button type="button" onClick={() => setMapaJogoSelecionado('')} className="text-xs text-blue-400 hover:text-blue-300">Mostrar todos</button>}</div>
-            <div className="max-h-[520px] overflow-y-auto space-y-2 pr-1">
-              {partidasDoAtleta.map(jogo => {
-                const st = jogo.dados[player.id] || {};
-                return <button key={jogo.id} type="button" onClick={() => setMapaJogoSelecionado(jogo.id)} className={'w-full text-left p-3 rounded-lg border transition ' + (mapaJogoSelecionado === jogo.id ? 'border-blue-500 bg-blue-950/30' : 'border-gray-800 bg-gray-900 hover:border-gray-600')}>
-                  <div className="flex justify-between text-[10px] text-blue-400 font-bold mb-1"><span>{jogo.dados?._meta?.competicao || 'Amigável'}</span><span>{new Date(jogo.criado_em).toLocaleDateString()}</span></div>
-                  <h4 className="font-bold text-sm text-white mb-2">{jogo.titulo}</h4>
-                  <div className="flex gap-3 text-xs font-mono text-gray-400 border-t border-gray-800 pt-2"><span>⏱️ {st.minutos || 0}'</span><span className="text-blue-400">⚽ {st.gols || 0}</span><span className="text-green-400">👟 {st.assistencias || 0}</span></div>
-                </button>;
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* SANFONA DE ESTATÍSTICAS + JOGOS REGISTADOS */}
       <div className="grid grid-cols-1 gap-6">
