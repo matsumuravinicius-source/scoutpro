@@ -11,7 +11,6 @@ import AbaAnalise from './components/AbaAnalise';
 import AbaRanking from './components/AbaRanking';
 import AbaComparativo from './components/AbaComparativo';
 import AbaRelatorios from './components/AbaRelatorios';
-import CampoFutebol, { CORES_ACAO_CAMPO } from './components/CampoFutebol';
 
 export const SETORES = {
   'GOLEIRO (GK)': ['GOLEIRO (GK)'],
@@ -149,8 +148,6 @@ export default function App() {
   const [currentPeriod, setCurrentPeriod] = useState(1);
   const [periodLogs, setPeriodLogs] = useState([]);
   const [matchEventLog, setMatchEventLog] = useState([]);
-  const [fieldEvents, setFieldEvents] = useState([]);
-  const [pendingFieldEvent, setPendingFieldEvent] = useState(null);
   const [opponentGoals, setOpponentGoals] = useState(0);
   const [opponentShots, setOpponentShots] = useState(0);
   const [opponentFinalThird, setOpponentFinalThird] = useState(0);
@@ -411,32 +408,6 @@ export default function App() {
   const handleUpdateSquadPlayer = (playerId, field, value) => { if (field === 'titular') { const titularesCount = matchSquad.filter(p => p.titular && p.id !== playerId).length; if (value === true && titularesCount >= 11) { alert("Já existem 11 titulares."); return; } const reservasCount = matchSquad.filter(p => !p.titular && p.id !== playerId).length; if (value === false && reservasCount >= 12) { alert("Já existem 12 reservas."); return; } } setMatchSquad(prev => prev.map(p => p.id === playerId ? { ...p, [field]: value, ...(field === 'titular' ? {inPitch: value} : {}) } : p)); };
   const handlePerformSubstitution = (playerOutId, playerInId) => { if(!playerInId) return; setMatchSquad(prev => prev.map(p => { if (p.id === playerOutId) return { ...p, inPitch: false }; if (p.id === playerInId) return { ...p, inPitch: true }; return p; })); };
 
-  const mapActionIds = new Set(['finalizacoes_certas', 'finalizacoes_erradas', 'gols', 'desarmes', 'duelos_aereos', 'bloqueios', 'perdas_posse', 'erro_passe', 'faltas_cometidas']);
-  const confirmFieldEvent = async point => {
-    const pending = pendingFieldEvent;
-    if (!pending) return;
-    const isOpponent = pending.kind === 'opponent';
-    const actionId = isOpponent ? (pending.actionType === 'golo' ? 'adversario_gol' : 'adversario_finalizacao') : pending.actionId;
-    const label = isOpponent ? (pending.actionType === 'golo' ? 'Golo do adversário' : 'Finalização do adversário') : (TODAS_ACOES.find(action => action.id === actionId)?.nome || actionId);
-    const player = isOpponent ? null : safePlayers.find(item => item.id === pending.playerId);
-    const newEvent = { id: `${Date.now()}-${Math.random()}`, ...point, actionId, label, playerId: pending.playerId || null, playerName: player?.nome || 'Adversário', period: currentPeriod, time: formatTime(matchTime), color: CORES_ACAO_CAMPO[actionId] };
-    setFieldEvents(previous => [...previous, newEvent]);
-    setPendingFieldEvent(null);
-
-    if (isOpponent) {
-      const name = pending.actionType === 'golo' ? 'Golo Marcado' : 'Finalização';
-      setMatchEventLog(previous => [`[T${currentPeriod} - ${formatTime(matchTime)}] Adversário • ${name}`, ...previous]);
-      if (pending.actionType === 'golo') setOpponentGoals(previous => previous + 1);
-      else setOpponentShots(previous => previous + 1);
-      return;
-    }
-
-    const currentValue = parseInt(matchStats[pending.playerId]?.[actionId], 10) || 0;
-    const actionName = TODAS_ACOES.find(action => action.id === actionId)?.nome || actionId;
-    setMatchEventLog(previous => [`[T${currentPeriod} - ${formatTime(matchTime)}] ${player?.nome || 'Atleta'} • ${actionName}`, ...previous]);
-    await processLiveAction(pending.playerId, actionId, currentValue + 1, 1);
-  };
-
   const getLivePlayerMinutes = playerId => calculatePlayedMinutes(matchSquad.map(sq => ({ ...sq, nome: safePlayers.find(player => player.id === sq.id)?.nome || '' })), matchEventLog, periodLogs, currentPeriod, matchTime)[playerId] || 0;
 
   const iniciarPartida = () => { 
@@ -452,26 +423,13 @@ export default function App() {
     setCurrentPeriod(1); 
     setPeriodLogs([]); 
     setMatchEventLog([]); 
-    setFieldEvents([]);
     setOpponentGoals(0); 
     setOpponentShots(0); 
     setOpponentFinalThird(0); 
   };
 
   const handleFinalizarTempo = () => { if (currentPeriod > 4) return; setPeriodLogs(prev => [...prev, `${currentPeriod}º Tempo: ${formatTime(matchTime)}`]); setIsTimerRunning(false); setMatchTime(0); setCurrentPeriod(prev => prev + 1); };
-  const handleOpponentAction = (type, increment) => {
-    if (increment > 0 && ['golo', 'finalizacao'].includes(type)) {
-      setPendingFieldEvent({ kind: 'opponent', actionType: type });
-      return;
-    }
-    if (increment > 0) {
-      const name = type === 'ultimo_terco' ? 'Entrada no Último Terço' : '';
-      if (name) setMatchEventLog(logs => [`[T${currentPeriod} - ${formatTime(matchTime)}] Adversário • ${name}`, ...logs]);
-    }
-    if (type === 'golo') setOpponentGoals(previous => Math.max(0, previous + increment));
-    if (type === 'finalizacao') setOpponentShots(previous => Math.max(0, previous + increment));
-    if (type === 'ultimo_terco') setOpponentFinalThird(previous => Math.max(0, previous + increment));
-  };
+  const handleOpponentAction = (type, increment) => { if (increment > 0) { let nomeAcao = ''; if(type === 'golo') nomeAcao = 'Golo Marcado'; if(type === 'finalizacao') nomeAcao = 'Finalização'; if(type === 'ultimo_terco') nomeAcao = 'Entrada no Último Terço'; setMatchEventLog(logs => [`[T${currentPeriod} - ${formatTime(matchTime)}] Adversário • ${nomeAcao}`, ...logs]); } if (type === 'golo') setOpponentGoals(prev => Math.max(0, prev + increment)); if (type === 'finalizacao') setOpponentShots(prev => Math.max(0, prev + increment)); if (type === 'ultimo_terco') setOpponentFinalThird(prev => Math.max(0, prev + increment)); };
 
   const processLiveAction = async (playerId, actionId, newMatchVal, incrementValue) => {
     const prevPlayerStats = matchStats[playerId] || {}; const newPlayerStats = { ...prevPlayerStats, [actionId]: newMatchVal };
@@ -490,16 +448,6 @@ export default function App() {
   const handleLiveAction = async (playerId, actionId, incrementValue) => {
     const currentMatchVal = parseInt(matchStats[playerId]?.[actionId]) || 0; 
     if (incrementValue < 0 && currentMatchVal === 0) return;
-    if (mapActionIds.has(actionId) && incrementValue > 0) {
-      setPendingFieldEvent({ kind: 'player', playerId, actionId });
-      return;
-    }
-    if (mapActionIds.has(actionId) && incrementValue < 0) {
-      setFieldEvents(previous => {
-        const lastMatch = previous.map((event, index) => ({ event, index })).reverse().find(({ event }) => event.playerId === playerId && event.actionId === actionId);
-        return lastMatch ? previous.filter((_, index) => index !== lastMatch.index) : previous;
-      });
-    }
     
     if (incrementValue > 0 && !['partidas', 'minutos'].includes(actionId)) {
       const acaoNome = TODAS_ACOES.find(a => a.id === actionId)?.nome || actionId;
@@ -530,7 +478,6 @@ export default function App() {
     
     dadosTratados._meta = { 
       eventLog: matchEventLog, periodLogs: periodLogs, 
-      fieldEvents,
       gols_sofridos: opponentGoals, finalizacoes_adversario: opponentShots, ultimo_terco_adversario: opponentFinalThird, 
       equipes: squadTeams, squad: matchSquad, competicao: matchCompetition,
       videoUrl: matchVideoUrl, offsetT1: videoOffsetT1, offsetT2: videoOffsetT2 
@@ -664,7 +611,8 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-{activeTab === 'clubes' && <AbaClubes teams={teams} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={handleSelectPlayerFromAnywhere} />}        
+        {activeTab === 'clubes' && <AbaClubes teams={teams} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={handleSelectPlayerFromAnywhere} />}
+        
         {activeTab === 'scout' && (
           selectedProfilePlayer ? (
             <PerfilAtleta
@@ -716,15 +664,6 @@ export default function App() {
 
         {activeTab === 'relatorios' && <AbaRelatorios teams={teams} players={safePlayers} matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} uniqueCategories={uniqueCategories} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} savedMetrics={savedMetrics} isDateInRange={isDateInRange} getIdade={getIdade} />}
       </main>
-      {pendingFieldEvent && <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl bg-gray-900 border border-gray-700 rounded-2xl p-5 shadow-2xl space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div><h2 className="text-xl font-black text-white">Marque a posição da ação</h2><p className="text-sm text-gray-400 mt-1">{pendingFieldEvent.kind === 'opponent' ? (pendingFieldEvent.actionType === 'golo' ? 'Golo do adversário' : 'Finalização do adversário') : `${safePlayers.find(player => player.id === pendingFieldEvent.playerId)?.nome || 'Atleta'} · ${TODAS_ACOES.find(action => action.id === pendingFieldEvent.actionId)?.nome}`}</p></div>
-            <button type="button" onClick={() => setPendingFieldEvent(null)} className="text-gray-400 hover:text-white">Cancelar ✕</button>
-          </div>
-          <CampoFutebol onSelectPoint={confirmFieldEvent} title="Campo (clique no local da ação)" />
-        </div>
-      </div>}
     </div>
   );
 }
