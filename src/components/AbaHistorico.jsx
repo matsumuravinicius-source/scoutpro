@@ -175,6 +175,31 @@ export default function AbaHistorico({
             return true;
           });
 
+          const fieldEvents = partida.dados?._meta?.fieldEvents || [];
+          const actionFilter = fieldMapActionFilter[partida.id] || '';
+          const periodFilter = fieldMapPeriodFilter[partida.id] || '';
+          const actions = [...new Map(fieldEvents.map(event => [event.actionId, event.label || event.actionId])).entries()];
+          const actionFilteredEvents = actionFilter ? fieldEvents.filter(event => event.actionId === actionFilter) : fieldEvents;
+          const visibleEvents = actionFilteredEvents.filter(event => !periodFilter || Number(event.period) === periodFilter);
+          const distribution = [
+            { label: "0'–15'", count: 0 }, { label: "16'–30'", count: 0 },
+            { label: "31'–fim 1ºT", count: 0 }, { label: "45'–60'", count: 0 },
+            { label: "61'–75'", count: 0 }, { label: ">75'", count: 0 }
+          ];
+          actionFilteredEvents.forEach(event => {
+            if (!event.time) return;
+            const period = Number(event.period);
+            const minute = Math.floor(timeToSeconds(event.time) / 60);
+            let bucketIndex = -1;
+            if (period === 1) bucketIndex = minute <= 15 ? 0 : minute <= 30 ? 1 : 2;
+            else if (period === 2) {
+              const matchMinute = 45 + minute;
+              bucketIndex = matchMinute <= 60 ? 3 : matchMinute <= 75 ? 4 : 5;
+            } else if (period > 2) bucketIndex = 5;
+            if (bucketIndex >= 0) distribution[bucketIndex].count += 1;
+          });
+          const maxCount = Math.max(...distribution.map(bucket => bucket.count), 1);
+
           return (
             <div key={partida.id} className={`bg-gray-900 rounded-xl border transition ${editingMatchId === partida.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-800'}`}>
               <div className="p-4 bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800/50 gap-4">
@@ -211,65 +236,19 @@ export default function AbaHistorico({
                   {partida.dados._meta && (
                      <div className="mb-6 space-y-4">
                         {(partida.dados._meta.fieldEvents?.length > 0 || partida.dados._meta.periodLogs?.length > 0 || partida.dados._meta.gols_sofridos > 0 || partida.dados._meta.finalizacoes_adversario > 0 || partida.dados._meta.ultimo_terco_adversario > 0) && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-                        {partida.dados._meta.fieldEvents?.length > 0 && (() => {
-                          const fieldEvents = partida.dados._meta.fieldEvents;
-                          const actionFilter = fieldMapActionFilter[partida.id] || '';
-                          const periodFilter = fieldMapPeriodFilter[partida.id] || '';
-                          const actions = [...new Map(fieldEvents.map(event => [event.actionId, event.label || event.actionId])).entries()];
-                          const actionFilteredEvents = actionFilter ? fieldEvents.filter(event => event.actionId === actionFilter) : fieldEvents;
-                          const visibleEvents = actionFilteredEvents.filter(event => !periodFilter || Number(event.period) === periodFilter);
-                          const distribution = [
-                            { label: "0'–15'", count: 0 },
-                            { label: "16'–30'", count: 0 },
-                            { label: "31'–fim 1ºT", count: 0 },
-                            { label: "45'–60'", count: 0 },
-                            { label: "61'–75'", count: 0 },
-                            { label: ">75'", count: 0 }
-                          ];
-                          actionFilteredEvents.forEach(event => {
-                            if (!event.time) return;
-                            const period = Number(event.period);
-                            const minute = Math.floor(timeToSeconds(event.time) / 60);
-                            let bucketIndex = -1;
-                            if (period === 1) bucketIndex = minute <= 15 ? 0 : minute <= 30 ? 1 : 2;
-                            else if (period === 2) {
-                              const matchMinute = 45 + minute;
-                              bucketIndex = matchMinute <= 60 ? 3 : matchMinute <= 75 ? 4 : 5;
-                            } else if (period > 2) bucketIndex = 5;
-                            if (bucketIndex >= 0) distribution[bucketIndex].count += 1;
-                          });
-                          const maxCount = Math.max(...distribution.map(bucket => bucket.count), 1);
-                          return <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-3">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div>
-                                <h4 className="text-gray-200 font-bold text-sm">Mapa de ações da partida</h4>
-                                {periodFilter && <button type="button" onClick={() => setFieldMapPeriodFilter(prev => ({ ...prev, [partida.id]: '' }))} className="text-[10px] text-blue-400 hover:text-blue-300 mt-1">Mostrar todos os tempos</button>}
-                              </div>
-                              <select aria-label="Filtrar mapa por ação" value={actionFilter} onChange={event => setFieldMapActionFilter(prev => ({ ...prev, [partida.id]: event.target.value }))} className="p-2 bg-gray-900 border border-gray-700 rounded text-xs text-blue-300 font-bold">
-                                <option value="">Todas as ações</option>
-                                {actions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                              </select>
+                        {fieldEvents.length > 0 && <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <h4 className="text-gray-200 font-bold text-sm">Mapa de ações da partida</h4>
+                              {periodFilter && <button type="button" onClick={() => setFieldMapPeriodFilter(prev => ({ ...prev, [partida.id]: '' }))} className="text-[10px] text-blue-400 hover:text-blue-300 mt-1">Mostrar todos os tempos</button>}
                             </div>
-                            <div className="max-w-xl"><CampoFutebol events={visibleEvents} title="" orientation="horizontal" /></div>
-                            <div className="border-t border-gray-800 pt-3">
-                              <div className="flex items-center justify-between gap-2 mb-3">
-                                <h5 className="text-gray-200 font-bold text-xs">Distribuição por período</h5>
-                                <span className="text-[10px] text-gray-500">{actionFilter ? actions.find(([id]) => id === actionFilter)?.[1] : 'Todas as ações'}</span>
-                              </div>
-                              <div className="overflow-x-auto">
-                                <div className="grid grid-cols-6 gap-2 min-w-[510px] items-end">
-                                  {distribution.map(bucket => <div key={bucket.label} className="min-w-0 text-center">
-                                    <div className="h-24 flex flex-col justify-end items-center">
-                                      <span className="text-xs font-bold text-white mb-1">{bucket.count}</span>
-                                      <div className="w-full max-w-12 rounded-t bg-blue-500/80 border border-blue-300/30 transition-all" style={{ height: `${Math.max(bucket.count ? 8 : 2, (bucket.count / maxCount) * 72)}px` }} title={`${bucket.count} ações`} />
-                                    </div>
-                                    <span className="block text-[10px] text-gray-400 mt-2 leading-tight">{bucket.label}</span>
-                                  </div>)}
-                                </div>
-                              </div>
-                            </div>
-                          </div>;
-                        })()}
+                            <select aria-label="Filtrar mapa por ação" value={actionFilter} onChange={event => setFieldMapActionFilter(prev => ({ ...prev, [partida.id]: event.target.value }))} className="p-2 bg-gray-900 border border-gray-700 rounded text-xs text-blue-300 font-bold">
+                              <option value="">Todas as ações</option>
+                              {actions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                            </select>
+                          </div>
+                          <div className="max-w-xl"><CampoFutebol events={visibleEvents} title="" orientation="horizontal" /></div>
+                        </div>}
                         <div className="space-y-4">
                           {partida.dados._meta.periodLogs?.length > 0 && (
                              <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
@@ -291,6 +270,23 @@ export default function AbaHistorico({
                               <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Últ. Terço</span>{editingMatchId === partida.id ? <input type="number" min="0" value={editMatchData.dados._meta?.ultimo_terco_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, ultimo_terco_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.ultimo_terco_adversario ?? 0}</div>}</div>
                             </div>
                           </div>
+                          {fieldEvents.length > 0 && <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-3">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <h5 className="text-gray-200 font-bold text-xs">Distribuição por período</h5>
+                              <span className="text-[10px] text-gray-500">{actionFilter ? actions.find(([id]) => id === actionFilter)?.[1] : 'Todas as ações'}</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <div className="grid grid-cols-6 gap-2 min-w-[510px] items-end">
+                                {distribution.map(bucket => <div key={bucket.label} className="min-w-0 text-center">
+                                  <div className="h-24 flex flex-col justify-end items-center">
+                                    <span className="text-xs font-bold text-white mb-1">{bucket.count}</span>
+                                    <div className="w-full max-w-12 rounded-t bg-blue-500/80 border border-blue-300/30 transition-all" style={{ height: `${Math.max(bucket.count ? 8 : 2, (bucket.count / maxCount) * 72)}px` }} title={`${bucket.count} ações`} />
+                                  </div>
+                                  <span className="block text-[10px] text-gray-400 mt-2 leading-tight">{bucket.label}</span>
+                                </div>)}
+                              </div>
+                            </div>
+                          </div>}
                         </div>
                         </div>}
 
