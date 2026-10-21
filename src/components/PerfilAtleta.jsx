@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
+import CampoFutebol from './CampoFutebol';
 
-// Funções auxiliares para extrair ID do YouTube e calcular os segundos do lance
 const extractYouTubeId = (url) => {
   if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|live\/)([^#&?]*).*/;
@@ -19,17 +19,23 @@ const timeToSeconds = (timeStr) => {
 export default function PerfilAtleta({
   player, onBack, teams, SETORES, ACOES_LINHA, ACOES_GOLEIRO,
   handleSetGlobalAction, handleUpdateGlobalActions, handleDeletePlayer,
-  onUpdatePlayerBio, matchHistory, isDateInRange, globalStartDate, globalEndDate
+  onUpdatePlayerBio, matchHistory, isDateInRange, uniqueCompetitions
 }) {
   const [expandedCategories, setExpandedCategories] = useState({ 'Geral': true });
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [isEditingStats, setIsEditingStats] = useState(false);
 
-  // NOVOS ESTADOS: Controlam a Playlist de Vídeo da Ação clicada
+  // NOVOS ESTADOS: Filtros locais de data e competição para o perfil do atleta
+  const [filtroDataInicio, setFiltroDataInicio] = useState('');
+  const [filtroDataFim, setFiltroDataFim] = useState('');
+  const [filtroCompeticao, setFiltroCompeticao] = useState('');
+  const [mapaJogoSelecionado, setMapaJogoSelecionado] = useState('');
+
+  // Estados da Playlist de Vídeo
   const [selectedActionForVideo, setSelectedActionForVideo] = useState(null);
   const [activeClipIndex, setActiveClipIndex] = useState(0);
   const [clipSeekCounter, setClipSeekCounter] = useState(0);
-  const [preRollSeconds, setPreRollSeconds] = useState(3); // Recua 3s antes do lance por defeito
+  const [preRollSeconds, setPreRollSeconds] = useState(3);
 
   const [editForm, setEditForm] = useState({
     nome: player?.nome || '',
@@ -41,45 +47,44 @@ export default function PerfilAtleta({
     pe_dominante: player?.pe_dominante || 'Destro',
     percentual_gordura: player?.percentual_gordura || '',
     velocidade_maxima: player?.velocidade_maxima || '',
-    ano_nascimento: player?.ano_nascimento || '',
-    foto_perfil: player?.acoes?.foto_perfil || ''
+    ano_nascimento: player?.ano_nascimento || ''
   });
-
-  const handlePhotoChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('Selecione um arquivo de imagem.');
-      event.target.value = '';
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      alert('A imagem deve ter no máximo 10 MB.');
-      event.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const image = new Image();
-      image.onload = () => {
-        const maxSize = 512;
-        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        setEditForm(prev => ({ ...prev, foto_perfil: canvas.toDataURL('image/jpeg', 0.82) }));
-      };
-      image.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  };
 
   if (!player) return null;
 
   const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
-  const valoresAcoes = player.acoes_calc || player.acoes || {};
+
+  // Filtragem de partidas do atleta considerando os filtros locais de data e competição
+  const partidasDoAtleta = (matchHistory || []).filter(m => {
+    if (!m.dados || !m.dados[player.id]) return false;
+    if (filtroCompeticao && m.dados?._meta?.competicao !== filtroCompeticao) return false;
+    if (!isDateInRange(m.criado_em, filtroDataInicio, filtroDataFim)) return false;
+    return true;
+  });
+  const partidasComMapa = partidasDoAtleta.filter(match => match.dados?._meta?.fieldEvents?.some(event => event.playerId === player.id));
+  const acoesNoMapa = partidasComMapa.flatMap(match => match.dados._meta.fieldEvents.filter(event => event.playerId === player.id));
+  const acoesVisiveisNoMapa = mapaJogoSelecionado
+    ? (partidasComMapa.find(match => match.id === mapaJogoSelecionado)?.dados?._meta?.fieldEvents || []).filter(event => event.playerId === player.id)
+    : acoesNoMapa;
+
+  // Cálculo dinâmico das estatísticas do atleta com base nos filtros aplicados na página de perfil
+  const getStatsFiltrados = () => {
+    if (!filtroDataInicio && !filtroDataFim && !filtroCompeticao) {
+      return player.acoes || {};
+    }
+    const computed = {};
+    playerAcoes.forEach(a => computed[a.id] = 0);
+
+    partidasDoAtleta.forEach(m => {
+      const st = m.dados[player.id];
+      Object.keys(st).forEach(k => {
+        computed[k] = (computed[k] || 0) + (parseInt(st[k]) || 0);
+      });
+    });
+    return computed;
+  };
+
+  const valoresAcoes = getStatsFiltrados();
 
   const categoriasAgrupadas = playerAcoes.reduce((acc, acao) => {
     const catName = acao.categoria || 'Estatísticas Globais';
@@ -89,10 +94,7 @@ export default function PerfilAtleta({
   }, {});
 
   const toggleCategory = (catName) => {
-    setExpandedCategories(prev => ({
-      ...prev,
-      [catName]: !prev[catName]
-    }));
+    setExpandedCategories(prev => ({ ...prev, [catName]: !prev[catName] }));
   };
 
   const expandirTodas = () => {
@@ -108,15 +110,6 @@ export default function PerfilAtleta({
     if (sucesso) setIsEditingBio(false);
   };
 
-  // Filtra as partidas em que este atleta esteve presente (respeitando filtro de data global)
-  const partidasDoAtleta = (matchHistory || []).filter(m => {
-    if (!isDateInRange(m.criado_em, globalStartDate, globalEndDate)) return false;
-    return m.dados && m.dados[player.id];
-  });
-
-  // ==========================================
-  // MOTOR DE BUSCA DE CLIPES POR AÇÃO DO ATLETA
-  // ==========================================
   const getClipsForAction = (acaoObj) => {
     if (!acaoObj) return [];
     const clips = [];
@@ -135,7 +128,6 @@ export default function PerfilAtleta({
         const afterBracket = log.split(']')[1] || '';
         const [playerPart, actionPart] = afterBracket.split('•').map(s => s.trim());
 
-        // Verifica se o evento na linha do tempo pertence a este jogador e a esta ação
         if (playerPart === player.nome && actionPart === acaoObj.nome) {
           const period = parseInt(matchTime[1]);
           const eventSec = timeToSeconds(matchTime[2]);
@@ -179,7 +171,7 @@ export default function PerfilAtleta({
   return (
     <div className="space-y-6 animate-fadeIn">
       
-      {/* BARRA DE TOPO: VOLTAR E AÇÕES RÁPIDAS */}
+      {/* BARRA DE TOPO */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-lg">
         <button
           onClick={onBack}
@@ -190,142 +182,79 @@ export default function PerfilAtleta({
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           <button
-            onClick={() => {
-              setIsEditingStats(!isEditingStats);
-              setSelectedActionForVideo(null);
-            }}
+            onClick={() => { setIsEditingStats(!isEditingStats); setSelectedActionForVideo(null); }}
             className={`px-4 py-2 rounded-lg text-xs font-bold border transition ${
-              isEditingStats 
-                ? 'bg-green-600 text-white border-green-500 shadow-lg shadow-green-900/30' 
-                : 'bg-gray-950 text-blue-400 border-gray-700 hover:bg-gray-800'
+              isEditingStats ? 'bg-green-600 text-white border-green-500 shadow-lg' : 'bg-gray-950 text-blue-400 border-gray-700 hover:bg-gray-800'
             }`}
           >
-            {isEditingStats ? '✔️ Concluir Edição de Dados' : '📊 Ajustar Estatísticas'}
+            {isEditingStats ? '✔️ Concluir Edição' : '📊 Ajustar Estatísticas'}
           </button>
-
           <button
             onClick={() => setIsEditingBio(!isEditingBio)}
             className="px-4 py-2 bg-blue-900/20 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg text-xs font-bold border border-blue-900/50 transition"
           >
-            {isEditingBio ? 'Cancelar Edição' : '✏️ Editar Ficha'}
+            {isEditingBio ? 'Cancelar' : '✏️ Editar Ficha'}
           </button>
-
           <button
-            onClick={() => {
-              handleDeletePlayer(player.id, player.nome);
-              onBack();
-            }}
+            onClick={() => { handleDeletePlayer(player.id, player.nome); onBack(); }}
             className="px-3 py-2 bg-red-900/20 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-xs font-bold border border-red-900/50 transition"
-            title="Excluir Atleta"
           >
             🗑️ Excluir
           </button>
         </div>
       </div>
 
-      {/* CABEÇALHO DO PERFIL OU FORMULÁRIO DE EDIÇÃO DA FICHA */}
+      {/* FILTROS LOCAIS DE PERFIL (DATA E COMPETIÇÃO) */}
+      <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col md:flex-row items-center gap-4">
+        <div className="flex items-center gap-2 text-gray-400 font-bold text-xs uppercase tracking-wider whitespace-nowrap">
+          🔍 Filtrar Perfil:
+        </div>
+        <div className="flex items-center gap-2 flex-1 w-full bg-gray-950 p-1 rounded border border-gray-700">
+          <span className="text-gray-500 text-xs font-bold px-2 uppercase">De:</span>
+          <input type="date" value={filtroDataInicio} onChange={e => setFiltroDataInicio(e.target.value)} className="bg-transparent outline-none text-xs w-full text-blue-400 font-bold" />
+          <span className="text-gray-500 text-xs font-bold px-2 uppercase border-l border-gray-700">Até:</span>
+          <input type="date" value={filtroDataFim} onChange={e => setFiltroDataFim(e.target.value)} className="bg-transparent outline-none text-xs w-full text-blue-400 font-bold" />
+        </div>
+        <select
+          value={filtroCompeticao}
+          onChange={e => setFiltroCompeticao(e.target.value)}
+          className="p-2 bg-gray-950 border border-gray-700 rounded text-xs text-blue-400 font-bold outline-none w-full md:w-64"
+        >
+          <option value="">Todas as Competições</option>
+          {uniqueCompetitions?.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {/* CABEÇALHO DO PERFIL */}
       {isEditingBio ? (
         <div className="bg-gray-900 p-6 rounded-xl border border-blue-500 shadow-xl">
           <h3 className="text-lg font-bold text-blue-400 mb-4">✏️ Editar Informações do Atleta</h3>
           <form onSubmit={handleSaveBioSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-3 flex items-center gap-4">
-                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-950 border border-gray-700 flex items-center justify-center text-xl font-black text-blue-400">
-                  {editForm.foto_perfil ? <img src={editForm.foto_perfil} alt="Prévia da foto do atleta" className="w-full h-full object-cover" /> : player.nome.substring(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Foto do atleta</label>
-                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="block max-w-full text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:font-bold file:text-white hover:file:bg-blue-500" />
-                  {editForm.foto_perfil && <button type="button" onClick={() => setEditForm(prev => ({ ...prev, foto_perfil: '' }))} className="mt-2 text-xs text-red-400 hover:text-red-300">Remover foto</button>}
-                  <p className="mt-1 text-[10px] text-gray-500">JPG, PNG ou outro formato de imagem; até 10 MB.</p>
-                </div>
-              </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
-                <input type="text" required value={editForm.nome} onChange={e => setEditForm({...editForm, nome: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm font-bold text-white outline-none focus:border-blue-500" />
+                <input type="text" required value={editForm.nome} onChange={e => setEditForm({...editForm, nome: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm font-bold text-white outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Clube Atual</label>
-                <select required value={editForm.time_nome} onChange={e => setEditForm({...editForm, time_nome: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none focus:border-blue-500">
+                <select required value={editForm.time_nome} onChange={e => setEditForm({...editForm, time_nome: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none">
                   <option value="">Selecione...</option>
                   {teams.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoria</label>
-                <input type="text" list="categorias-list" required value={editForm.categoria} onChange={e => setEditForm({...editForm, categoria: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none focus:border-blue-500" />
+                <input type="text" list="categorias-list" required value={editForm.categoria} onChange={e => setEditForm({...editForm, categoria: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Setor no Campo</label>
-                <select required value={editForm.setor} onChange={e => setEditForm({...editForm, setor: e.target.value, funcoes: []})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm text-green-400 font-bold outline-none focus:border-blue-500">
-                  <option value="">Selecione...</option>
-                  {Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              {editForm.setor && (
-                <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Funções no Campo</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {SETORES[editForm.setor]?.map(f => (
-                      <label key={f} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={editForm.funcoes.includes(f)}
-                          onChange={e => {
-                            if (e.target.checked) setEditForm({...editForm, funcoes: [...editForm.funcoes, f]});
-                            else setEditForm({...editForm, funcoes: editForm.funcoes.filter(x => x !== f)});
-                          }}
-                          className="accent-blue-500 rounded"
-                        />
-                        {f}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pé Dominante</label>
-                <select value={editForm.pe_dominante} onChange={e => setEditForm({...editForm, pe_dominante: e.target.value})} className="w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-xs outline-none">
-                  <option value="Destro">Destro</option>
-                  <option value="Canhoto">Canhoto</option>
-                  <option value="Ambidestro">Ambidestro</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ano Nasc.</label>
-                <input type="number" value={editForm.ano_nascimento} onChange={e => setEditForm({...editForm, ano_nascimento: e.target.value})} className="w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-xs outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Altura (m)</label>
-                <input type="number" step="0.01" value={editForm.altura} onChange={e => setEditForm({...editForm, altura: e.target.value})} className="w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-xs outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">% Gordura</label>
-                <input type="number" step="0.1" value={editForm.percentual_gordura} onChange={e => setEditForm({...editForm, percentual_gordura: e.target.value})} className="w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-xs outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vel. Máx (km/h)</label>
-                <input type="number" step="0.1" value={editForm.velocidade_maxima} onChange={e => setEditForm({...editForm, velocidade_maxima: e.target.value})} className="w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-xs outline-none" />
-              </div>
-            </div>
-
-            <button type="submit" className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-lg">
-              Salvar Alterações da Ficha
-            </button>
+            <button type="submit" className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition">Salvar Alterações</button>
           </form>
         </div>
       ) : (
         <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center text-3xl font-black text-white shadow-lg border border-blue-400/30">
-              {player.acoes?.foto_perfil ? <img src={player.acoes.foto_perfil} alt={`Foto de ${player.nome}`} className="w-full h-full object-cover" /> : player.nome.substring(0, 2).toUpperCase()}
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center text-3xl font-black text-white shadow-lg border border-blue-400/30">
+              {player.nome.substring(0, 2).toUpperCase()}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -335,94 +264,34 @@ export default function PerfilAtleta({
                 </span>
               </div>
               <p className="text-sm text-green-400 font-bold mt-1.5">
-                {player.setor} <span className="text-gray-500 mx-1">|</span> <span className="text-gray-300">{player.funcoes?.join(' • ') || 'Sem função específica'}</span>
+                {player.setor} <span className="text-gray-500 mx-1">|</span> <span className="text-gray-300">{player.funcoes?.join(' • ') || 'Sem função'}</span>
               </p>
-              {(globalStartDate || globalEndDate) && (
-                <p className="text-xs text-orange-400 font-bold mt-1">
-                  📅 Exibindo estatísticas filtradas por período selecionado
-                </p>
-              )}
             </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full lg:w-auto bg-gray-950 p-4 rounded-xl border border-gray-800">
-            <div className="text-center px-3">
-              <span className="text-[10px] text-gray-500 font-bold uppercase block">Idade</span>
-              <span className="text-sm font-mono font-bold text-white">{idade}</span>
-              {player.ano_nascimento && <span className="block text-[10px] text-gray-500">({player.ano_nascimento})</span>}
-            </div>
-            <div className="text-center px-3 border-l border-gray-800">
-              <span className="text-[10px] text-gray-500 font-bold uppercase block">Pé Dom.</span>
-              <span className="text-sm font-bold text-blue-400">{player.pe_dominante || '-'}</span>
-            </div>
-            <div className="text-center px-3 border-l border-gray-800">
-              <span className="text-[10px] text-gray-500 font-bold uppercase block">Altura</span>
-              <span className="text-sm font-mono font-bold text-white">{player.altura ? `${player.altura}m` : '-'}</span>
-            </div>
-            <div className="text-center px-3 border-l border-gray-800">
-              <span className="text-[10px] text-gray-500 font-bold uppercase block">% Gordura</span>
-              <span className="text-sm font-mono font-bold text-white">{player.percentual_gordura ? `${player.percentual_gordura}%` : '-'}</span>
-            </div>
-            <div className="text-center px-3 border-l border-gray-800">
-              <span className="text-[10px] text-gray-500 font-bold uppercase block">Vel. Máx</span>
-              <span className="text-sm font-mono font-bold text-green-400">{player.velocidade_maxima ? `${player.velocidade_maxima} km/h` : '-'}</span>
-            </div>
+            <div className="text-center px-3"><span className="text-[10px] text-gray-500 font-bold uppercase block">Idade</span><span className="text-sm font-mono font-bold text-white">{idade}</span></div>
+            <div className="text-center px-3 border-l border-gray-800"><span className="text-[10px] text-gray-500 font-bold uppercase block">Pé Dom.</span><span className="text-sm font-bold text-blue-400">{player.pe_dominante || '-'}</span></div>
+            <div className="text-center px-3 border-l border-gray-800"><span className="text-[10px] text-gray-500 font-bold uppercase block">Altura</span><span className="text-sm font-mono font-bold text-white">{player.altura ? `${player.altura}m` : '-'}</span></div>
+            <div className="text-center px-3 border-l border-gray-800"><span className="text-[10px] text-gray-500 font-bold uppercase block">% Gordura</span><span className="text-sm font-mono font-bold text-white">{player.percentual_gordura ? `${player.percentual_gordura}%` : '-'}</span></div>
+            <div className="text-center px-3 border-l border-gray-800"><span className="text-[10px] text-gray-500 font-bold uppercase block">Vel. Máx</span><span className="text-sm font-mono font-bold text-green-400">{player.velocidade_maxima ? `${player.velocidade_maxima} km/h` : '-'}</span></div>
           </div>
         </div>
       )}
 
-      {/* ========================================================
-          NOVO: CENTRAL DE VÍDEO / PLAYLIST DE LANCES POR AÇÃO
-          ======================================================== */}
+      {/* PLAYLIST DE LANCES EM VÍDEO */}
       {selectedActionForVideo && (
         <div className="bg-gray-900 p-6 rounded-xl border-2 border-blue-500 shadow-2xl space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-800 pb-3">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 block">
-                🎥 Playlist de Scouting por Ação
-              </span>
-              <h3 className="text-xl font-black text-white flex items-center gap-2">
-                {selectedActionForVideo.nome} — {player.nome}
-                <span className="text-xs font-mono bg-blue-900/40 text-blue-300 px-2.5 py-0.5 rounded-full border border-blue-800">
-                  {actionClips.length} {actionClips.length === 1 ? 'momento gravado' : 'momentos gravados'}
-                </span>
-              </h3>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <select
-                value={preRollSeconds}
-                onChange={e => {
-                  setPreRollSeconds(Number(e.target.value));
-                  setClipSeekCounter(prev => prev + 1);
-                }}
-                className="bg-gray-950 text-xs text-blue-400 font-bold p-2 rounded-lg border border-gray-800 outline-none"
-                title="Tempo de antecedência antes da ação"
-              >
-                <option value={0}>Momento Exato (0s)</option>
-                <option value={3}>Recuar -3s</option>
-                <option value={5}>Recuar -5s</option>
-                <option value={10}>Recuar -10s</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setSelectedActionForVideo(null)}
-                className="px-3 py-1.5 bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white text-xs font-bold rounded-lg border border-red-900/50 transition"
-              >
-                ✕ Fechar Vídeo
-              </button>
-            </div>
+          <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+            <h3 className="text-xl font-black text-white flex items-center gap-2">
+              {selectedActionForVideo.nome} — {player.nome} ({actionClips.length} lances)
+            </h3>
+            <button onClick={() => setSelectedActionForVideo(null)} className="px-3 py-1.5 bg-red-900/30 text-red-400 text-xs font-bold rounded-lg border border-red-900/50">✕ Fechar</button>
           </div>
-
           {actionClips.length === 0 ? (
-            <div className="text-center py-12 bg-gray-950 rounded-xl border border-gray-800 border-dashed text-gray-400 text-sm">
-              Nenhum momento registado na Linha do Tempo para <strong>{selectedActionForVideo.nome}</strong> nas partidas salvas.
-              <p className="text-xs text-gray-500 mt-1">Os novos registos feitos durante o Live Match aparecerão automaticamente aqui com o minuto exato!</p>
-            </div>
+            <div className="text-center py-12 bg-gray-950 rounded-xl text-gray-400 text-sm">Nenhum momento registado para esta ação com os filtros atuais.</div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Leitor de Vídeo */}
               <div className="lg:col-span-2 space-y-2">
                 {currentClip?.ytId ? (
                   <div className="aspect-video w-full bg-black rounded-xl overflow-hidden border border-gray-800 shadow-lg">
@@ -430,180 +299,86 @@ export default function PerfilAtleta({
                       key={`${currentClip.ytId}-${currentClip.targetSecond}-${clipSeekCounter}`}
                       className="w-full h-full"
                       src={`https://www.youtube.com/embed/${currentClip.ytId}?start=${currentClip.targetSecond}&autoplay=1&rel=0`}
-                      title="Reprodutor de Lances"
+                      title="Reprodutor"
                       frameBorder="0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                     />
                   </div>
                 ) : (
-                  <div className="aspect-video w-full bg-gray-950 rounded-xl border border-gray-800 flex flex-col items-center justify-center p-6 text-center">
-                    <span className="text-3xl mb-2">⚠️</span>
-                    <p className="text-sm font-bold text-gray-300">Esta partida não possui um link do YouTube associado.</p>
-                    <p className="text-xs text-gray-500 mt-1">Vá até a aba Histórico, clique em Editar (✏️) na partida "{currentClip?.matchTitle}" e adicione o link do vídeo.</p>
-                  </div>
-                )}
-
-                {currentClip && (
-                  <div className="flex justify-between items-center bg-gray-950 px-4 py-2.5 rounded-lg border border-gray-800 text-xs">
-                    <div>
-                      <span className="font-bold text-blue-400">{currentClip.competition}</span> • <strong className="text-white">{currentClip.matchTitle}</strong> ({currentClip.matchDate})
-                    </div>
-                    <div className="font-mono font-bold text-green-400">
-                      Lance: {currentClip.period}ºT aos {currentClip.timeStr}
-                    </div>
-                  </div>
+                  <div className="aspect-video w-full bg-gray-950 rounded-xl flex items-center justify-center p-6 text-center text-xs text-gray-500">Partida sem link do YouTube associado.</div>
                 )}
               </div>
-
-              {/* Lista de Momentos (Playlist) */}
-              <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 flex flex-col max-h-[420px]">
-                <h4 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-800 pb-2">
-                  📋 Selecionar Momento ({actionClips.length})
-                </h4>
-                <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-                  {actionClips.map((clip, idx) => {
-                    const isSelected = idx === activeClipIndex;
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setActiveClipIndex(idx);
-                          setClipSeekCounter(prev => prev + 1);
-                        }}
-                        className={`w-full text-left p-3 rounded-lg border transition flex flex-col gap-1 ${
-                          isSelected
-                            ? 'bg-blue-900/30 border-blue-500 text-white shadow'
-                            : 'bg-gray-900/60 border-gray-800/80 text-gray-300 hover:bg-gray-900 hover:border-gray-700'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center w-full">
-                          <span className="text-[10px] font-bold uppercase text-blue-400 truncate pr-2">
-                            {clip.competition} • {clip.matchDate}
-                          </span>
-                          <span className="text-xs font-mono font-black text-green-400 bg-green-950/40 px-2 py-0.5 rounded border border-green-900/50">
-                            ▶ {clip.period}ºT - {clip.timeStr}
-                          </span>
-                        </div>
-                        <div className="text-xs font-bold truncate">{clip.matchTitle}</div>
-                        {!clip.ytId && (
-                          <span className="text-[10px] text-orange-400">⚠️ Sem vídeo anexado na partida</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 flex flex-col max-h-[350px] overflow-y-auto space-y-2">
+                {actionClips.map((clip, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => { setActiveClipIndex(idx); setClipSeekCounter(prev => prev + 1); }}
+                    className={`w-full text-left p-2.5 rounded border text-xs ${idx === activeClipIndex ? 'bg-blue-900/30 border-blue-500 text-white' : 'bg-gray-900/60 border-gray-800 text-gray-300'}`}
+                  >
+                    <div className="font-bold">{clip.matchTitle}</div>
+                    <div className="text-green-400 font-mono text-[10px]">▶ {clip.period}ºT - {clip.timeStr}</div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* GRELHA PRINCIPAL: SUBMENUS SANFONA (ESQUERDA) + HISTÓRICO DE JOGOS (DIREITA) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* COLUNA 1 E 2: ESTATÍSTICAS EM ESTILO SANFONA (ACORDEÃO) */}
-        <div className="lg:col-span-2 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl space-y-4 h-fit">
-          <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-            <div>
-              <h2 className="text-xl font-bold text-white">📊 Desempenho & Estatísticas</h2>
-              <p className="text-xs text-gray-400">Clique em qualquer ação abaixo para abrir o vídeo com todos os lances daquela estatística.</p>
-            </div>
-            <button
-              type="button"
-              onClick={expandirTodas}
-              className="text-xs text-blue-400 hover:text-blue-300 font-bold bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800 transition"
-            >
-              Expandir / Recolher Tudo
-            </button>
+      <section className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3">
+        <h2 className="text-lg font-bold text-white">🗺️ Mapa de ações e jogos registrados</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <div className="lg:col-span-4">
+            {acoesVisiveisNoMapa.length ? <CampoFutebol events={acoesVisiveisNoMapa} title="" orientation="vertical" /> : <div className="aspect-[68/105] max-h-[520px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">Nenhuma ação de campo registrada{mapaJogoSelecionado ? ' neste jogo' : ' para este atleta'}.</div>}
           </div>
+          <div className="lg:col-span-8 bg-gray-950 p-3 rounded-lg border border-gray-800">
+            <div className="flex items-center justify-between gap-3 mb-2"><h3 className="text-sm font-bold text-white">Jogos registrados ({partidasDoAtleta.length})</h3>{mapaJogoSelecionado && <button type="button" onClick={() => setMapaJogoSelecionado('')} className="text-xs text-blue-400 hover:text-blue-300">Mostrar todos</button>}</div>
+            <div className="max-h-[520px] overflow-y-auto space-y-2 pr-1">
+              {partidasDoAtleta.map(jogo => {
+                const st = jogo.dados[player.id] || {};
+                return <button key={jogo.id} type="button" onClick={() => setMapaJogoSelecionado(jogo.id)} className={'w-full text-left p-3 rounded-lg border transition ' + (mapaJogoSelecionado === jogo.id ? 'border-blue-500 bg-blue-950/30' : 'border-gray-800 bg-gray-900 hover:border-gray-600')}>
+                  <div className="flex justify-between text-[10px] text-blue-400 font-bold mb-1"><span>{jogo.dados?._meta?.competicao || 'Amigável'}</span><span>{new Date(jogo.criado_em).toLocaleDateString()}</span></div>
+                  <h4 className="font-bold text-sm text-white mb-2">{jogo.titulo}</h4>
+                  <div className="flex gap-3 text-xs font-mono text-gray-400 border-t border-gray-800 pt-2"><span>⏱️ {st.minutos || 0}'</span><span className="text-blue-400">⚽ {st.gols || 0}</span><span className="text-green-400">👟 {st.assistencias || 0}</span></div>
+                </button>;
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
 
+      {/* SANFONA DE ESTATÍSTICAS + JOGOS REGISTADOS */}
+      <div className="grid grid-cols-1 gap-6">
+        <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl space-y-4 h-fit">
+          <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+            <h2 className="text-xl font-bold text-white">📊 Desempenho & Estatísticas</h2>
+            <button onClick={expandirTodas} className="text-xs text-blue-400 font-bold bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800">Expandir / Recolher</button>
+          </div>
           <div className="space-y-3">
             {Object.keys(categoriasAgrupadas).map(catName => {
               const isOpen = !!expandedCategories[catName];
-              const totalCategoria = categoriasAgrupadas[catName].reduce((sum, acao) => {
-                if (acao.id === 'minutos' || acao.id === 'partidas') return sum;
-                return sum + (parseInt(valoresAcoes[acao.id]) || 0);
-              }, 0);
-
               return (
-                <div key={catName} className="bg-gray-950 rounded-xl border border-gray-800 overflow-hidden transition-all">
-                  <button
-                    type="button"
-                    onClick={() => toggleCategory(catName)}
-                    className="w-full p-4 flex justify-between items-center bg-gray-950 hover:bg-gray-900/80 transition text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs uppercase font-black text-blue-400 tracking-widest">{catName}</span>
-                      {catName !== 'Geral' && (
-                        <span className="bg-blue-900/30 text-blue-300 text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-blue-800/40">
-                          {totalCategoria} ações
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-gray-400 text-xs font-bold bg-gray-900 px-2.5 py-1 rounded border border-gray-800">
-                      {isOpen ? 'Recolher ▲' : 'Expandir ▼'}
-                    </span>
+                <div key={catName} className="bg-gray-950 rounded-xl border border-gray-800 overflow-hidden">
+                  <button onClick={() => toggleCategory(catName)} className="w-full p-4 flex justify-between items-center bg-gray-950 hover:bg-gray-900 text-left">
+                    <span className="text-xs uppercase font-black text-blue-400 tracking-widest">{catName}</span>
+                    <span className="text-gray-400 text-xs">{isOpen ? '▲' : '▼'}</span>
                   </button>
-
                   {isOpen && (
                     <div className="p-4 border-t border-gray-800 bg-gray-900/40 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {categoriasAgrupadas[catName].map(acao => {
                         const isVideoCallable = !isEditingStats && !['partidas', 'minutos'].includes(acao.id);
-                        const isSelectedVideo = selectedActionForVideo?.id === acao.id;
-                        const clipsCount = isVideoCallable ? getClipsForAction(acao).length : 0;
-
                         return (
                           <div
                             key={acao.id}
                             onClick={() => isVideoCallable && handleSelectActionVideo(acao)}
-                            className={`flex justify-between items-center px-3.5 py-2.5 rounded-lg border transition ${
-                              isSelectedVideo
-                                ? 'bg-blue-900/30 border-blue-500 ring-1 ring-blue-500'
-                                : 'bg-gray-950 border-gray-800/80 hover:border-blue-500/50'
-                            } ${isVideoCallable ? 'cursor-pointer group' : ''}`}
+                            className={`flex justify-between items-center px-3.5 py-2.5 rounded-lg border transition ${selectedActionForVideo?.id === acao.id ? 'bg-blue-900/30 border-blue-500' : 'bg-gray-950 border-gray-800'} ${isVideoCallable ? 'cursor-pointer group' : ''}`}
                           >
-                            <div className="flex flex-col pr-2">
-                              <span className="text-sm text-gray-200 font-medium group-hover:text-blue-400 transition flex items-center gap-1.5">
-                                {acao.nome}
-                              </span>
-                              {isVideoCallable && (
-                                <span className={`text-[10px] font-bold mt-0.5 ${clipsCount > 0 ? 'text-green-400' : 'text-gray-600 group-hover:text-gray-400'}`}>
-                                  {clipsCount > 0 ? `🎥 Ver ${clipsCount} ${clipsCount === 1 ? 'lance em vídeo' : 'lances em vídeo'}` : '🎬 Clique p/ abrir vídeos'}
-                                </span>
-                              )}
+                            <div>
+                              <span className="text-sm text-gray-200 font-medium group-hover:text-blue-400">{acao.nome}</span>
+                              {isVideoCallable && <span className="block text-[10px] text-green-400">🎥 Ver lances em vídeo</span>}
                             </div>
-                            
-                            {isEditingStats ? (
-                              <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateGlobalActions(player.id, acao.id, -1)}
-                                  className="w-7 h-7 bg-gray-800 hover:bg-red-900/60 text-gray-300 rounded font-bold flex items-center justify-center transition"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={player.acoes[acao.id] ?? 0}
-                                  onChange={(e) => handleSetGlobalAction(player.id, acao.id, e.target.value)}
-                                  className="w-16 p-1 text-center bg-gray-900 text-blue-400 font-mono font-bold text-sm rounded border border-gray-700 outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateGlobalActions(player.id, acao.id, 1)}
-                                  className="w-7 h-7 bg-gray-800 hover:bg-green-900/60 text-gray-300 rounded font-bold flex items-center justify-center transition"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="font-mono text-lg font-black text-blue-400">
-                                {valoresAcoes[acao.id] || 0}
-                              </span>
-                            )}
+                            <span className="font-mono text-lg font-black text-blue-400">{valoresAcoes[acao.id] || 0}</span>
                           </div>
                         );
                       })}
@@ -613,62 +388,6 @@ export default function PerfilAtleta({
               );
             })}
           </div>
-        </div>
-
-        {/* COLUNA 3: HISTÓRICO DE PARTIDAS DO ATLETA */}
-        <div className="lg:col-span-1 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl h-fit space-y-4">
-          <div className="border-b border-gray-800 pb-3">
-            <h2 className="text-lg font-bold text-white flex items-center justify-between">
-              <span>🏟️ Jogos Registados</span>
-              <span className="text-xs font-mono bg-blue-900/30 text-blue-400 px-2.5 py-0.5 rounded-full">
-                {partidasDoAtleta.length}
-              </span>
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">Partidas em que este atleta teve ações computadas.</p>
-          </div>
-
-          {partidasDoAtleta.length === 0 ? (
-            <div className="text-center py-12 text-gray-500 text-xs border border-gray-800 border-dashed rounded-lg">
-              Nenhuma partida registada no histórico para este atleta.
-            </div>
-          ) : (
-            <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
-              {partidasDoAtleta.map(jogo => {
-                const st = jogo.dados[player.id] || {};
-                const hasVideo = !!extractYouTubeId(jogo.dados?._meta?.videoUrl);
-                return (
-                  <div key={jogo.id} className="bg-gray-950 p-3.5 rounded-lg border border-gray-800 hover:border-gray-700 transition">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-[10px] font-bold uppercase text-blue-400 bg-blue-900/20 px-2 py-0.5 rounded">
-                        {jogo.dados?._meta?.competicao || 'Amigável'}
-                      </span>
-                      <span className="text-[11px] font-mono text-gray-500">
-                        {new Date(jogo.criado_em).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-sm text-white mb-2 flex items-center justify-between">
-                      <span>{jogo.titulo}</span>
-                      {hasVideo && <span className="text-[10px] text-red-400 bg-red-950/40 px-1.5 py-0.5 rounded border border-red-900/40">🎥 Vídeo</span>}
-                    </h4>
-                    <div className="flex gap-3 text-xs font-mono border-t border-gray-900 pt-2 text-gray-400">
-                      <span>⏱️ <strong>{st.minutos || 0}'</strong></span>
-                      {player.setor === 'GOLEIRO (GK)' ? (
-                        <>
-                          <span className="text-green-400">🧤 Def: <strong>{st.defesas || 0}</strong></span>
-                          <span className="text-red-400">🥅 GS: <strong>{st.gols_sofridos || 0}</strong></span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-blue-400">⚽ Golos: <strong>{st.gols || 0}</strong></span>
-                          <span className="text-green-400">👟 Assist: <strong>{st.assistencias || 0}</strong></span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
 
       </div>
