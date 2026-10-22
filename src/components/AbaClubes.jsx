@@ -26,8 +26,10 @@ const readShieldPhoto = file => new Promise((resolve, reject) => {
 
 const EMPTY_TEAM_DETAILS = { country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' };
 
-export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
+export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleUpdateTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [isEditingTeam, setIsEditingTeam] = useState(false);
+  const [editTeamForm, setEditTeamForm] = useState({ name: '', country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' });
   const [newTeamDetails, setNewTeamDetails] = useState(EMPTY_TEAM_DETAILS);
   const [expandedAction, setExpandedAction] = useState('');
   const [activeClip, setActiveClip] = useState(null);
@@ -37,7 +39,7 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const handleShieldPhotoChange = async event => {
+  const handleShieldPhotoChange = async (event, setDetails = setNewTeamDetails) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -52,11 +54,40 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
     }
     try {
       const shieldPhoto = await readShieldPhoto(file);
-      setNewTeamDetails(previous => ({ ...previous, shieldPhoto }));
+      setDetails(previous => ({ ...previous, shieldPhoto }));
     } catch (error) {
       alert(error.message || 'Não foi possível carregar a imagem.');
     }
     event.target.value = '';
+  };
+
+  const startEditingTeam = () => {
+    const details = teamMetadata[selectedTeam] || {};
+    setEditTeamForm({
+      name: selectedTeam,
+      country: details.country || '',
+      division: details.division || '',
+      categories: Array.isArray(details.categories) ? details.categories.join(', ') : details.categories || '',
+      foundedYear: details.foundedYear || '',
+      shieldPhoto: details.shieldPhoto || ''
+    });
+    setIsEditingTeam(true);
+  };
+
+  const submitTeamEdit = async event => {
+    event.preventDefault();
+    const nextName = editTeamForm.name.trim();
+    const success = await handleUpdateTeam(selectedTeam, nextName, {
+      country: editTeamForm.country.trim(),
+      division: editTeamForm.division.trim(),
+      categories: editTeamForm.categories.split(',').map(category => category.trim()).filter(Boolean),
+      foundedYear: editTeamForm.foundedYear ? Number(editTeamForm.foundedYear) : null,
+      shieldPhoto: editTeamForm.shieldPhoto
+    });
+    if (success) {
+      setSelectedTeam(nextName);
+      setIsEditingTeam(false);
+    }
   };
 
   if (selectedTeam) {
@@ -131,18 +162,57 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
 
     return (
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-blue-900/40 border border-blue-700 flex items-center justify-center text-3xl overflow-hidden">{selectedTeamDetails.shieldPhoto ? <img src={selectedTeamDetails.shieldPhoto} alt={`Escudo de ${selectedTeam}`} className="w-full h-full object-cover" /> : '🛡️'}</div>
-            <div>
-              <span className="text-xs font-black uppercase tracking-widest text-blue-400">Perfil do Clube</span>
-              <h1 className="text-3xl font-black text-white">{selectedTeam}</h1>
-              <p className="text-sm text-gray-400">{teamPlayers.length} atletas · {teamMatches.length} partidas registradas</p>
-              {(selectedTeamDetails.country || selectedTeamDetails.division || selectedTeamDetails.categories?.length || selectedTeamDetails.foundedYear) && <p className="text-xs text-gray-500 mt-1">{[selectedTeamDetails.country, selectedTeamDetails.division, selectedTeamDetails.categories?.join(', '), selectedTeamDetails.foundedYear && `Fundado em ${selectedTeamDetails.foundedYear}`].filter(Boolean).join(' · ')}</p>}
+        {isEditingTeam ? (
+          <form onSubmit={submitTeamEdit} className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl space-y-4">
+            <h2 className="text-xl font-bold">Editar clube</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              <label className="block text-xs font-bold text-gray-400">Nome do clube
+                <input type="text" required value={editTeamForm.name} onChange={event => setEditTeamForm(previous => ({ ...previous, name: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              </label>
+              <label className="block text-xs font-bold text-gray-400">País
+                <input type="text" value={editTeamForm.country} onChange={event => setEditTeamForm(previous => ({ ...previous, country: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              </label>
+              <label className="block text-xs font-bold text-gray-400">Divisão
+                <input type="text" value={editTeamForm.division} onChange={event => setEditTeamForm(previous => ({ ...previous, division: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              </label>
+              <label className="block text-xs font-bold text-gray-400">Categorias
+                <input type="text" value={editTeamForm.categories} onChange={event => setEditTeamForm(previous => ({ ...previous, categories: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+                <span className="block mt-1 text-[10px] text-gray-600">Separe as categorias por vírgula.</span>
+              </label>
+              <label className="block text-xs font-bold text-gray-400">Ano de fundação
+                <input type="number" min="1800" max={new Date().getFullYear()} value={editTeamForm.foundedYear} onChange={event => setEditTeamForm(previous => ({ ...previous, foundedYear: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              </label>
+              <div className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-950 p-3">
+                {editTeamForm.shieldPhoto ? <img src={editTeamForm.shieldPhoto} alt="Pré-visualização do escudo" className="w-14 h-14 object-cover rounded-lg border border-gray-700" /> : <div className="w-14 h-14 rounded-lg border border-gray-700 flex items-center justify-center text-2xl text-gray-500">🛡️</div>}
+                <div className="min-w-0">
+                  <span className="block text-xs font-bold text-gray-400 mb-2">Foto do escudo</span>
+                  <label className="inline-block cursor-pointer px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-xs font-bold text-gray-200">Escolher imagem<input type="file" accept="image/*" onChange={event => handleShieldPhotoChange(event, setEditTeamForm)} className="hidden" /></label>
+                  {editTeamForm.shieldPhoto && <button type="button" onClick={() => setEditTeamForm(previous => ({ ...previous, shieldPhoto: '' }))} className="ml-2 text-xs font-bold text-red-400 hover:text-red-300">Remover</button>}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold">Salvar alterações</button>
+              <button type="button" onClick={() => setIsEditingTeam(false)} className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-bold text-gray-300">Cancelar</button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-blue-900/40 border border-blue-700 flex items-center justify-center text-3xl overflow-hidden">{selectedTeamDetails.shieldPhoto ? <img src={selectedTeamDetails.shieldPhoto} alt={`Escudo de ${selectedTeam}`} className="w-full h-full object-cover" /> : '🛡️'}</div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-blue-400">Perfil do Clube</span>
+                <h1 className="text-3xl font-black text-white">{selectedTeam}</h1>
+                <p className="text-sm text-gray-400">{teamPlayers.length} atletas · {teamMatches.length} partidas registradas</p>
+                {(selectedTeamDetails.country || selectedTeamDetails.division || selectedTeamDetails.categories?.length || selectedTeamDetails.foundedYear) && <p className="text-xs text-gray-500 mt-1">{[selectedTeamDetails.country, selectedTeamDetails.division, selectedTeamDetails.categories?.join(', '), selectedTeamDetails.foundedYear && `Fundado em ${selectedTeamDetails.foundedYear}`].filter(Boolean).join(' · ')}</p>}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={startEditingTeam} className="px-4 py-2.5 bg-blue-900/30 hover:bg-blue-900/60 rounded-lg border border-blue-900/50 text-sm font-bold text-blue-300">✏️ Editar clube</button>
+              <button type="button" onClick={() => { setSelectedTeam(''); setFieldMapActionFilter(''); }} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
             </div>
           </div>
-          <button type="button" onClick={() => { setSelectedTeam(''); setFieldMapActionFilter(''); }} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
-        </div>
+        )}
 
         <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex flex-col md:flex-row items-center gap-3">
           <span className="text-gray-400 font-bold text-xs uppercase whitespace-nowrap">🔎 Filtrar perfil:</span>

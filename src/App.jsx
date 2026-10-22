@@ -315,6 +315,51 @@ export default function App() {
     return true;
   };
 
+  const handleUpdateTeam = async (oldName, newNameValue, metadata) => {
+    const newName = newNameValue.trim();
+    if (!newName) {
+      alert('O nome do clube é obrigatório.');
+      return false;
+    }
+    if (newName !== oldName && teams.includes(newName)) {
+      alert('Já existe um clube com esse nome.');
+      return false;
+    }
+    const { error } = await supabase.rpc('update_team_profile', {
+      p_old_name: oldName,
+      p_new_name: newName,
+      p_metadata: metadata
+    });
+    if (error) {
+      alert(`Não foi possível editar o clube. Confirme se as migrações do Supabase foram aplicadas. Detalhe: ${error.message}`);
+      return false;
+    }
+
+    if (newName !== oldName) {
+      setTeams(teams.map(team => team === oldName ? newName : team).sort());
+      setPlayers(safePlayers.map(player => player.time_nome === oldName ? { ...player, time_nome: newName } : player));
+      setMatchHistory(safeMatchHistory.map(match => {
+        const meta = match.dados?._meta;
+        if (!meta?.equipes?.includes(oldName)) return match;
+        return {
+          ...match,
+          dados: { ...match.dados, _meta: { ...meta, equipes: meta.equipes.map(team => team === oldName ? newName : team) } }
+        };
+      }));
+    }
+    const updatedMetadata = { ...teamMetadata };
+    delete updatedMetadata[oldName];
+    updatedMetadata[newName] = metadata;
+    setTeamMetadata(updatedMetadata);
+    localStorage.setItem('scoutpro_team_metadata', JSON.stringify(updatedMetadata));
+    if (filterTeam === oldName) setFilterTeam(newName);
+    if (filterTeamA === oldName) setFilterTeamA(newName);
+    if (filterTeamB === oldName) setFilterTeamB(newName);
+    if (matchTeam === oldName) setMatchTeam(newName);
+    if (novoJogador.time_nome === oldName) setNovoJogador(previous => ({ ...previous, time_nome: newName }));
+    return true;
+  };
+
   const handleDeleteCompetition = async (compName) => {
     if (!window.confirm(`ATENÇÃO DESTRUTIVA! Excluir a competição "${compName}" irá apagar DEFINITIVAMENTE todas as partidas nela registradas e reverter os dados globais dos jogadores. Deseja continuar?`)) return;
     
@@ -726,7 +771,7 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
+        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleUpdateTeam={handleUpdateTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
         
         {activeTab === 'scout' && (
           selectedProfilePlayer ? (
