@@ -157,46 +157,48 @@ export default function AbaBaseDados({
         </div>
         
         {/* Grelha de Cartões de Redirecionamento */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {finalPlayers.map(player => (
-            <div
-              key={player.id}
-              onClick={() => onSelectPlayer(player.id)}
-              className="bg-gray-900 hover:bg-gray-800/80 p-5 rounded-xl border border-gray-800 hover:border-blue-500/60 transition-all cursor-pointer shadow-lg group flex justify-between items-center"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-900/30 border border-blue-800/50 flex items-center justify-center text-blue-400 font-black text-base group-hover:bg-blue-600 group-hover:text-white transition">
-                  {player.nome.substring(0, 2).toUpperCase()}
+        <div className="max-h-[70vh] overflow-y-auto overscroll-contain pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {finalPlayers.map(player => (
+              <div
+                key={player.id}
+                onClick={() => onSelectPlayer(player.id)}
+                className="bg-gray-900 hover:bg-gray-800/80 p-5 rounded-xl border border-gray-800 hover:border-blue-500/60 transition-all cursor-pointer shadow-lg group flex justify-between items-center"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-900/30 border border-blue-800/50 flex items-center justify-center text-blue-400 font-black text-base group-hover:bg-blue-600 group-hover:text-white transition">
+                    {player.nome.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-white group-hover:text-blue-400 transition">
+                      {player.nome}
+                    </h4>
+                    <p className="text-xs text-blue-400 font-bold mt-0.5">
+                      {player.time_nome} • <span className="text-gray-400">{player.categoria}</span>
+                    </p>
+                    <p className="text-[11px] text-green-400 font-bold mt-1">
+                      {player.setor} {player.funcoes?.length > 0 ? `(${player.funcoes.join(', ')})` : ''}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-base font-bold text-white group-hover:text-blue-400 transition">
-                    {player.nome}
-                  </h4>
-                  <p className="text-xs text-blue-400 font-bold mt-0.5">
-                    {player.time_nome} • <span className="text-gray-400">{player.categoria}</span>
-                  </p>
-                  <p className="text-[11px] text-green-400 font-bold mt-1">
-                    {player.setor} {player.funcoes?.length > 0 ? `(${player.funcoes.join(', ')})` : ''}
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-xs font-bold text-blue-400 bg-blue-950/60 group-hover:bg-blue-600 group-hover:text-white px-3 py-1.5 rounded-lg border border-blue-800/50 transition whitespace-nowrap">
-                  Ver Perfil ➔
-                </span>
-                <span className="text-[10px] font-mono text-gray-500">
-                  {player.acoes?.partidas || 0} jogos
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-xs font-bold text-blue-400 bg-blue-950/60 group-hover:bg-blue-600 group-hover:text-white px-3 py-1.5 rounded-lg border border-blue-800/50 transition whitespace-nowrap">
+                    Ver Perfil ➔
+                  </span>
+                  <span className="text-[10px] font-mono text-gray-500">
+                    {player.acoes?.partidas || 0} jogos
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
           
-          {finalPlayers.length === 0 && (
-            <div className="col-span-1 md:col-span-2 text-center py-20 text-gray-500 border border-gray-800 border-dashed rounded-xl">
-              Nenhum atleta encontrado com os filtros selecionados.
-            </div>
-          )}
+            {finalPlayers.length === 0 && (
+              <div className="col-span-1 md:col-span-2 text-center py-20 text-gray-500 border border-gray-800 border-dashed rounded-xl">
+                Nenhum atleta encontrado com os filtros selecionados.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
