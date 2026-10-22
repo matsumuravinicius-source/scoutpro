@@ -109,6 +109,7 @@ export default function App() {
   const [selectedPlayerProfileId, setSelectedPlayerProfileId] = useState(null);
 
   const [teams, setTeams] = useState([]);
+  const [teamMetadata, setTeamMetadata] = useState({});
   const [players, setPlayers] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
   
@@ -262,8 +263,16 @@ export default function App() {
   };
 
   async function buscarDados() {
-    const { data: timesData } = await supabase.from('times').select('nome').order('nome');
-    if (timesData) setTeams(timesData.map(t => t.nome));
+    const { data: timesData } = await supabase.from('times').select('*').order('nome');
+    if (timesData) {
+      setTeams(timesData.map(t => t.nome));
+      let localMetadata = {};
+      try { localMetadata = JSON.parse(localStorage.getItem('scoutpro_team_metadata') || '{}'); } catch { localMetadata = {}; }
+      setTeamMetadata(Object.fromEntries(timesData.map(team => [team.nome, {
+        ...(localMetadata[team.nome] || {}),
+        ...(team.metadata || {})
+      }])));
+    }
     const { data: compData } = await supabase.from('competicoes').select('nome').order('nome');
     if (compData) setCompetitions(compData.map(c => c.nome));
     const { data: jogadoresData } = await supabase.from('jogadores').select('*');
@@ -288,11 +297,22 @@ export default function App() {
     if (error) { alert("Erro: " + error.message); } else { setCompetitions([...competitions, newCompetitionName.trim()].sort()); setNewCompetitionName(''); alert("✅ Competição adicionada!"); }
   };
 
-  const handleAddTeam = async (e) => {
+  const handleAddTeam = async (e, metadata = {}) => {
     e.preventDefault();
-    if (!newTeamName.trim() || teams.includes(newTeamName.trim())) return alert("Clube inválido ou já existe.");
-    const { error } = await supabase.from('times').insert([{ nome: newTeamName.trim() }]);
-    if (!error) { setTeams([...teams, newTeamName.trim()].sort()); setNewTeamName(''); }
+    const teamName = newTeamName.trim();
+    if (!teamName || teams.includes(teamName)) return alert("Clube inválido ou já existe.");
+    let { error } = await supabase.from('times').insert([{ nome: teamName, metadata }]);
+    if (error && /metadata|column|schema cache/i.test(error.message || '')) {
+      const fallback = await supabase.from('times').insert([{ nome: teamName }]);
+      error = fallback.error;
+    }
+    if (error) return alert(`Não foi possível adicionar o clube: ${error.message}`);
+    const nextMetadata = { ...teamMetadata, [teamName]: metadata };
+    setTeams([...teams, teamName].sort());
+    setTeamMetadata(nextMetadata);
+    localStorage.setItem('scoutpro_team_metadata', JSON.stringify(nextMetadata));
+    setNewTeamName('');
+    return true;
   };
 
   const handleDeleteCompetition = async (compName) => {
@@ -342,6 +362,10 @@ export default function App() {
     await supabase.from('times').delete().eq('nome', teamName);
     setPlayers(safePlayers.filter(p => p.time_nome !== teamName));
     setTeams(teams.filter(t => t !== teamName));
+    const nextMetadata = { ...teamMetadata };
+    delete nextMetadata[teamName];
+    setTeamMetadata(nextMetadata);
+    localStorage.setItem('scoutpro_team_metadata', JSON.stringify(nextMetadata));
     alert(`✅ Clube "${teamName}" e seus jogadores foram excluídos!`);
   };
 
@@ -702,7 +726,7 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'clubes' && <AbaClubes teams={teams} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
+        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
         
         {activeTab === 'scout' && (
           selectedProfilePlayer ? (

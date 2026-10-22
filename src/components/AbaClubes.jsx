@@ -1,8 +1,34 @@
 import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
 
-export default function AbaClubes({ teams, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
+const readShieldPhoto = file => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+  reader.onload = () => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Não foi possível abrir a imagem selecionada.'));
+    image.onload = () => {
+      const maxDimension = 512;
+      const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+const EMPTY_TEAM_DETAILS = { country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' };
+
+export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [newTeamDetails, setNewTeamDetails] = useState(EMPTY_TEAM_DETAILS);
   const [expandedAction, setExpandedAction] = useState('');
   const [activeClip, setActiveClip] = useState(null);
   const [filterActionId, setFilterActionId] = useState('');
@@ -11,7 +37,30 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const handleShieldPhotoChange = async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione um ficheiro de imagem para o escudo.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 10 MB.');
+      event.target.value = '';
+      return;
+    }
+    try {
+      const shieldPhoto = await readShieldPhoto(file);
+      setNewTeamDetails(previous => ({ ...previous, shieldPhoto }));
+    } catch (error) {
+      alert(error.message || 'Não foi possível carregar a imagem.');
+    }
+    event.target.value = '';
+  };
+
   if (selectedTeam) {
+    const selectedTeamDetails = teamMetadata[selectedTeam] || {};
     const teamPlayers = players.filter(player => player.time_nome === selectedTeam);
     const teamPlayerIds = teamPlayers.map(player => player.id);
     const teamMatches = matchHistory.filter(match => {
@@ -84,11 +133,12 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-blue-900/40 border border-blue-700 flex items-center justify-center text-3xl">🛡️</div>
+            <div className="w-16 h-16 rounded-2xl bg-blue-900/40 border border-blue-700 flex items-center justify-center text-3xl overflow-hidden">{selectedTeamDetails.shieldPhoto ? <img src={selectedTeamDetails.shieldPhoto} alt={`Escudo de ${selectedTeam}`} className="w-full h-full object-cover" /> : '🛡️'}</div>
             <div>
               <span className="text-xs font-black uppercase tracking-widest text-blue-400">Perfil do Clube</span>
               <h1 className="text-3xl font-black text-white">{selectedTeam}</h1>
               <p className="text-sm text-gray-400">{teamPlayers.length} atletas · {teamMatches.length} partidas registradas</p>
+              {(selectedTeamDetails.country || selectedTeamDetails.division || selectedTeamDetails.categories?.length || selectedTeamDetails.foundedYear) && <p className="text-xs text-gray-500 mt-1">{[selectedTeamDetails.country, selectedTeamDetails.division, selectedTeamDetails.categories?.join(', '), selectedTeamDetails.foundedYear && `Fundado em ${selectedTeamDetails.foundedYear}`].filter(Boolean).join(' · ')}</p>}
             </div>
           </div>
           <button type="button" onClick={() => { setSelectedTeam(''); setFieldMapActionFilter(''); }} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
@@ -215,9 +265,43 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
     <div className="space-y-6">
       <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
         <h2 className="text-2xl font-bold mb-2">Gestão de Clubes</h2>
-        <p className="text-sm text-gray-400 mb-6">Adicione ou exclua clubes do sistema.</p>
-        <form onSubmit={handleAddTeam} className="flex flex-col md:flex-row gap-4">
-          <input type="text" placeholder="Nome do Novo Clube" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)} className="flex-1 p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none focus:border-blue-500" />
+        <p className="text-sm text-gray-400 mb-6">Adicione clubes com dados de identificação e escudo.</p>
+        <form onSubmit={event => handleAddTeam(event, {
+          country: newTeamDetails.country.trim(),
+          division: newTeamDetails.division.trim(),
+          categories: newTeamDetails.categories.split(',').map(category => category.trim()).filter(Boolean),
+          foundedYear: newTeamDetails.foundedYear ? Number(newTeamDetails.foundedYear) : null,
+          shieldPhoto: newTeamDetails.shieldPhoto
+        }).then(success => { if (success) setNewTeamDetails(EMPTY_TEAM_DETAILS); })} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <label className="block text-xs font-bold text-gray-400">Nome do clube
+              <input type="text" placeholder="Nome do Novo Clube" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+            </label>
+            <label className="block text-xs font-bold text-gray-400">País
+              <input type="text" placeholder="Ex.: Brasil" value={newTeamDetails.country} onChange={event => setNewTeamDetails(previous => ({ ...previous, country: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+            </label>
+            <label className="block text-xs font-bold text-gray-400">Divisão
+              <input type="text" placeholder="Ex.: Série A" value={newTeamDetails.division} onChange={event => setNewTeamDetails(previous => ({ ...previous, division: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+            </label>
+            <label className="block text-xs font-bold text-gray-400">Categorias
+              <input type="text" placeholder="Ex.: Principal, Sub-20, Sub-17" value={newTeamDetails.categories} onChange={event => setNewTeamDetails(previous => ({ ...previous, categories: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              <span className="block mt-1 text-[10px] text-gray-600">Separe as categorias por vírgula.</span>
+            </label>
+            <label className="block text-xs font-bold text-gray-400">Ano de fundação
+              <input type="number" min="1800" max={new Date().getFullYear()} placeholder="Ex.: 1910" value={newTeamDetails.foundedYear} onChange={event => setNewTeamDetails(previous => ({ ...previous, foundedYear: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+            </label>
+            <div className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-950 p-3">
+              {newTeamDetails.shieldPhoto ? <img src={newTeamDetails.shieldPhoto} alt="Pré-visualização do escudo" className="w-14 h-14 object-cover rounded-lg border border-gray-700" /> : <div className="w-14 h-14 rounded-lg border border-gray-700 flex items-center justify-center text-2xl text-gray-500">🛡️</div>}
+              <div className="min-w-0">
+                <span className="block text-xs font-bold text-gray-400 mb-2">Foto do escudo</span>
+                <label className="inline-block cursor-pointer px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-xs font-bold text-gray-200">
+                  Escolher imagem
+                  <input type="file" accept="image/*" onChange={handleShieldPhotoChange} className="hidden" />
+                </label>
+                {newTeamDetails.shieldPhoto && <button type="button" onClick={() => setNewTeamDetails(previous => ({ ...previous, shieldPhoto: '' }))} className="ml-2 text-xs font-bold text-red-400 hover:text-red-300">Remover</button>}
+              </div>
+            </div>
+          </div>
           <button type="submit" className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-lg">Adicionar Clube</button>
         </form>
       </div>
@@ -262,6 +346,7 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                 <tr><td colSpan="11" className="p-6 text-center text-gray-500">Nenhum clube registado.</td></tr>
               ) : (
                 teams.map(team => {
+                  const teamDetails = teamMetadata[team] || {};
                   
                   const teamMatches = matchHistory.filter(m => {
                     if (filterCompetition && m.dados?._meta?.competicao !== filterCompetition) return false;
@@ -304,7 +389,10 @@ export default function AbaClubes({ teams, players, matchHistory, newTeamName, s
                       {/* Célula com o Botão de Lixo */}
                       <td className="p-3 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">
                         <div className="flex items-center justify-between gap-2">
-                           <button type="button" onClick={() => { setSelectedTeam(team); setExpandedAction(''); setActiveClip(null); setFieldMapActionFilter(''); }} className="font-bold text-left text-blue-300 hover:text-blue-200 hover:underline" title={`Abrir perfil de ${team}`}>{team}</button>
+                           <button type="button" onClick={() => { setSelectedTeam(team); setExpandedAction(''); setActiveClip(null); setFieldMapActionFilter(''); }} className="font-bold text-left text-blue-300 hover:text-blue-200 hover:underline flex items-center gap-2" title={`Abrir perfil de ${team}`}>
+                             {teamDetails.shieldPhoto ? <img src={teamDetails.shieldPhoto} alt="" className="w-8 h-8 rounded object-cover border border-gray-700" /> : <span className="text-xl">🛡️</span>}
+                             <span>{team}</span>
+                           </button>
                            <button onClick={() => handleDeleteTeam(team)} className="text-red-500 bg-red-900/20 rounded p-1.5 text-xs hover:bg-red-500 hover:text-white transition shadow" title="Excluir Clube e Todos os Jogadores">🗑️</button>
                         </div>
                       </td>
