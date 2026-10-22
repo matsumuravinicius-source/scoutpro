@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { getPlayerActions, getPlayerSectorLabel } from '../utils/playerSectors';
 
 // Funções auxiliares de Vídeo e Tempo
 const extractYouTubeId = (url) => {
@@ -256,7 +257,7 @@ export default function AbaLiveMatch({
           className="w-16 p-2 bg-gray-950 rounded border border-gray-700 text-center font-bold outline-none focus:border-blue-500" 
         />
         <div className="flex-1 font-bold w-full text-center sm:text-left">
-          {p.nome} <span className="text-xs text-gray-500 font-normal">({p.setor})</span>
+          {p.nome} <span className="text-xs text-gray-500 font-normal">({getPlayerSectorLabel(p)})</span>
         </div>
         <select 
           value={sq.titular ? 'titular' : 'reserva'} 
@@ -586,7 +587,7 @@ export default function AbaLiveMatch({
                 {emCampo.map(sq => {
                   const player = players.find(p => p.id === sq.id);
                   const isExpanded = expandedLivePlayers.includes(sq.id);
-                  const playerAcoes = (player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA).filter(a => a.id !== 'partidas');
+                  const playerAcoes = getPlayerActions(player, ACOES_LINHA, ACOES_GOLEIRO).filter(a => a.id !== 'partidas');
                   const categoriasAgrupadas = groupActionsByCategory(playerAcoes);
 
                   return (
@@ -599,7 +600,7 @@ export default function AbaLiveMatch({
                             <span className="bg-gray-800 text-blue-400 px-1.5 py-0.5 rounded font-mono text-xs border border-gray-700">{sq.numero ? sq.numero : '?'}</span> 
                             {player.nome}
                           </h4>
-                          <p className="text-xs text-blue-400 mt-1">{player.setor} | {player.funcoes?.join(' • ') || player.posicao}</p>
+                          <p className="text-xs text-blue-400 mt-1">{getPlayerSectorLabel(player)} | {player.funcoes?.join(' • ') || player.posicao}</p>
                         </div>
                         <div className="text-gray-500 text-xs font-bold bg-gray-950 px-2 py-1 rounded-full border border-gray-800">
                           {isExpanded ? 'Ocultar ▲' : 'Ações ▼'}
@@ -616,7 +617,7 @@ export default function AbaLiveMatch({
                             <option value="">Escolha o reserva...</option>
                             {noBanco.map(s => {
                               const p = players.find(x => x.id === s.id);
-                              return <option key={s.id} value={s.id}>Nº {s.numero} - {p.nome} ({p.setor})</option>;
+                              return <option key={s.id} value={s.id}>Nº {s.numero} - {p.nome} ({getPlayerSectorLabel(p)})</option>;
                             })}
                           </select>
                           <button onClick={() => setSubPlayerOut(null)} className="w-full py-2 text-xs text-gray-400 font-bold bg-gray-800 rounded hover:bg-gray-700 transition">Cancelar Substituição</button>
@@ -705,7 +706,7 @@ export default function AbaLiveMatch({
                   {noBanco.map(sq => {
                     const player = players.find(p => p.id === sq.id);
                     const isExpanded = expandedLivePlayers.includes(sq.id);
-                    const playerAcoes = (player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA).filter(a => a.id !== 'partidas');
+                    const playerAcoes = getPlayerActions(player, ACOES_LINHA, ACOES_GOLEIRO).filter(a => a.id !== 'partidas');
                     const categoriasAgrupadas = groupActionsByCategory(playerAcoes);
 
                     return (
@@ -718,7 +719,7 @@ export default function AbaLiveMatch({
                               <span className="bg-gray-900 text-gray-500 px-1.5 py-0.5 rounded font-mono text-xs border border-gray-800">{sq.numero ? sq.numero : '?'}</span> 
                               {player.nome}
                             </h4>
-                            <p className="text-xs text-orange-500/70 mt-1">{player.setor}</p>
+                            <p className="text-xs text-orange-500/70 mt-1">{getPlayerSectorLabel(player)}</p>
                           </div>
                           <div className="text-gray-600 text-xs font-bold">
                             {isExpanded ? 'Ocultar ▲' : 'Ações ▼'}

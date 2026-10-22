@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getPlayerActions, getPlayerSectorLabel } from '../utils/playerSectors';
 
 export default function AbaRelatorios({
   teams, players, matchHistory, uniqueCompetitions, uniqueCategories,
@@ -137,7 +138,7 @@ export default function AbaRelatorios({
   const acoesParaExibir = TODAS_ACOES.filter(a => {
     if (!acoesSelecionadas.includes(a.id)) return false;
     if (tipoRelatorio === 'atleta' && atletaObj) {
-      const listaValida = atletaObj.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+      const listaValida = getPlayerActions(atletaObj, ACOES_LINHA, ACOES_GOLEIRO);
       return listaValida.some(x => x.id === a.id);
     }
     return true;
@@ -231,7 +232,7 @@ export default function AbaRelatorios({
                 >
                   <option value="">Escolha o Atleta...</option>
                   {jogadoresFiltrados.map(p => (
-                    <option key={p.id} value={p.id}>{p.nome} ({p.setor})</option>
+                    <option key={p.id} value={p.id}>{p.nome} ({getPlayerSectorLabel(p)})</option>
                   ))}
                 </select>
               </div>
@@ -394,7 +395,7 @@ export default function AbaRelatorios({
                       </span>
                     </div>
                     <p className="text-sm text-green-400 font-bold mt-2">
-                      Setor: {atletaObj.setor} | Funções: {atletaObj.funcoes?.join(' • ') || 'Não especificada'}
+                      Setores: {getPlayerSectorLabel(atletaObj)} | Funções: {atletaObj.funcoes?.join(' • ') || 'Não especificada'}
                     </p>
                   </div>
 

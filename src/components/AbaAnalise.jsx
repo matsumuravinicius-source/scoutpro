@@ -1,4 +1,5 @@
 import React from 'react';
+import { getPlayerSectorLabel } from '../utils/playerSectors';
 
 export default function AbaAnalise({
   FilterComponent, handleSaveCustomMetric, novaMetrica, setNovaMetrica,
@@ -144,7 +145,7 @@ export default function AbaAnalise({
                           <td className="p-3 text-gray-500 font-mono font-bold">#{index + 1}</td>
                           <td className="p-3 font-bold">
                             {player.nome} 
-                            <span className="text-[10px] text-gray-500 block mt-1 uppercase tracking-wider">{player.setor}</span>
+                            <span className="text-[10px] text-gray-500 block mt-1 uppercase tracking-wider">{getPlayerSectorLabel(player)}</span>
                           </td>
                           <td className="p-3 text-gray-400 text-sm">{player.time_nome}</td>
                           

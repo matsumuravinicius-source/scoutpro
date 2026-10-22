@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getPlayerSectors, getPlayerSectorLabel } from '../utils/playerSectors';
 
 export default function AbaBaseDados({
   novoJogador, setNovoJogador, teams, handleSavePlayer,
@@ -12,6 +13,8 @@ export default function AbaBaseDados({
   const finalPlayers = displayedPlayers.filter(p =>
     p.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const selectedNewSectors = getPlayerSectors(novoJogador);
+  const availableNewFunctions = [...new Set(selectedNewSectors.flatMap(sector => SETORES[sector] || []))];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -47,20 +50,37 @@ export default function AbaBaseDados({
 
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Setor no Campo</label>
-              <select required value={novoJogador.setor} onChange={e => {
-                  const s = e.target.value;
-                  setNovoJogador({...novoJogador, setor: s, funcoes: []});
-              }} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 outline-none text-sm focus:border-blue-500 text-green-400 font-bold">
-                <option value="">Selecione...</option>
-                {Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <details className="bg-gray-950 rounded-lg border border-gray-700">
+                <summary className="cursor-pointer list-none p-2.5 text-sm text-green-400 font-bold">
+                  {selectedNewSectors.length ? selectedNewSectors.join(' • ') : 'Selecione um ou mais setores...'}
+                </summary>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 border-t border-gray-800">
+                  {Object.keys(SETORES).map(sector => (
+                    <label key={sector} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={selectedNewSectors.includes(sector)} onChange={event => {
+                        const sectors = event.target.checked
+                          ? [...selectedNewSectors, sector]
+                          : selectedNewSectors.filter(value => value !== sector);
+                        const nextFunctions = [...new Set(sectors.flatMap(value => SETORES[value] || []))];
+                        setNovoJogador({
+                          ...novoJogador,
+                          setores: sectors,
+                          setor: sectors.join(' | '),
+                          funcoes: (novoJogador.funcoes || []).filter(funcao => nextFunctions.includes(funcao))
+                        });
+                      }} className="accent-blue-500" />
+                      {sector}
+                    </label>
+                  ))}
+                </div>
+              </details>
             </div>
 
-            {novoJogador.setor && (
+            {selectedNewSectors.length > 0 && (
               <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Funções / Papel (Pode escolher + de 1)</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {SETORES[novoJogador.setor].map(f => (
+                  {availableNewFunctions.map(f => (
                     <label key={f} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white">
                       <input type="checkbox" checked={novoJogador.funcoes.includes(f)} onChange={(e) => {
                         if(e.target.checked) setNovoJogador({...novoJogador, funcoes: [...novoJogador.funcoes, f]});
@@ -167,7 +187,7 @@ export default function AbaBaseDados({
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-blue-900/30 border border-blue-800/50 flex items-center justify-center text-blue-400 font-black text-base group-hover:bg-blue-600 group-hover:text-white transition">
-                    {player.nome.substring(0, 2).toUpperCase()}
+                  {player.nome.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <h4 className="text-base font-bold text-white group-hover:text-blue-400 transition">
@@ -177,7 +197,7 @@ export default function AbaBaseDados({
                       {player.time_nome} • <span className="text-gray-400">{player.categoria}</span>
                     </p>
                     <p className="text-[11px] text-green-400 font-bold mt-1">
-                      {player.setor} {player.funcoes?.length > 0 ? `(${player.funcoes.join(', ')})` : ''}
+                      {getPlayerSectorLabel(player)} {player.funcoes?.length > 0 ? `(${player.funcoes.join(', ')})` : ''}
                     </p>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
+import { getPlayerSectorLabel } from '../utils/playerSectors';
 
 const readShieldPhoto = file => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -308,7 +309,7 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
             {teamPlayers.map(player => <button key={player.id} type="button" onClick={() => onSelectPlayer?.(player.id)} className="w-full text-left bg-gray-950 p-4 rounded-lg border border-gray-800 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
               <span className="font-bold text-white">{player.nome}</span>
               <span className="block text-xs text-blue-400 mt-1">{player.categoria || 'Sem categoria'}</span>
-              <span className="block text-xs text-gray-500 mt-1">{player.setor} · {player.funcoes?.join(', ') || 'Sem função'}</span>
+              <span className="block text-xs text-gray-500 mt-1">{getPlayerSectorLabel(player)} · {player.funcoes?.join(', ') || 'Sem função'}</span>
               <span className="block text-xs text-blue-400 mt-3">Ver perfil do atleta →</span>
             </button>)}
           </div> : <p className="text-sm text-gray-500">Nenhum atleta cadastrado neste clube.</p>}

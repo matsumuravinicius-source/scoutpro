@@ -12,6 +12,7 @@ import AbaRanking from './components/AbaRanking';
 import AbaComparativo from './components/AbaComparativo';
 import AbaRelatorios from './components/AbaRelatorios';
 import CampoFutebol, { CORES_ACAO_CAMPO } from './components/CampoFutebol';
+import { getPlayerActions, getPlayerSectors } from './utils/playerSectors';
 
 export const SETORES = {
   'GOLEIRO (GK)': ['GOLEIRO (GK)'],
@@ -119,7 +120,7 @@ export default function App() {
   const [filterTeam, setFilterTeam] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
-  const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
+  const [novoJogador, setNovoJogador] = useState({ nome: '', time_nome: '', categoria: '', setor: '', setores: [], funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
 
   const [matchCompetition, setMatchCompetition] = useState(''); 
   const [filterMatchCompetition, setFilterMatchCompetition] = useState(''); 
@@ -196,7 +197,7 @@ export default function App() {
   const filteredPlayersA = safePlayers.filter(p => {
     if (filterTeamA && p.time_nome !== filterTeamA) return false;
     if (filterCategoryA && p.categoria !== filterCategoryA) return false;
-    if (filterSectorA && p.setor !== filterSectorA) return false;
+    if (filterSectorA && !getPlayerSectors(p).includes(filterSectorA)) return false;
     if ((startDateA || endDateA) && !safeMatchHistory.some(m => isDateInRange(m.criado_em, startDateA, endDateA) && m.dados && m.dados[p.id])) return false;
     return true;
   });
@@ -204,7 +205,7 @@ export default function App() {
   const filteredPlayersB = safePlayers.filter(p => {
     if (filterTeamB && p.time_nome !== filterTeamB) return false;
     if (filterCategoryB && p.categoria !== filterCategoryB) return false;
-    if (filterSectorB && p.setor !== filterSectorB) return false;
+    if (filterSectorB && !getPlayerSectors(p).includes(filterSectorB)) return false;
     if ((startDateB || endDateB) && !safeMatchHistory.some(m => isDateInRange(m.criado_em, startDateB, endDateB) && m.dados && m.dados[p.id])) return false;
     return true;
   });
@@ -235,7 +236,7 @@ export default function App() {
     if (compareA && compareB) {
       const pA = safePlayers.find(p => p.id === compareA);
       const pB = safePlayers.find(p => p.id === compareB);
-      if (pA && pB && pA.setor !== pB.setor) {
+      if (pA && pB && getPlayerSectors(pA).join('|') !== getPlayerSectors(pB).join('|')) {
         const compareKey = `${compareA}-${compareB}`;
         if (dismissedWarningFor !== compareKey) setShowSectorWarning(true);
       } else setShowSectorWarning(false);
@@ -279,7 +280,7 @@ export default function App() {
     if (jogadoresData) {
       const jogadoresFormatados = jogadoresData.map(j => {
         const acoesBase = {}; 
-        const listaRelevante = j.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+        const listaRelevante = getPlayerActions(j, ACOES_LINHA, ACOES_GOLEIRO);
         listaRelevante.forEach(a => acoesBase[a.id] = j.acoes?.[a.id] || 0);
         if (j.acoes?.foto_perfil) acoesBase.foto_perfil = j.acoes.foto_perfil;
         return { ...j, acoes: acoesBase };
@@ -416,12 +417,17 @@ export default function App() {
 
   const handleSavePlayer = async (e) => {
     e.preventDefault();
+    const setoresSelecionados = getPlayerSectors(novoJogador);
+    if (setoresSelecionados.length === 0) return alert("Selecione pelo menos um setor.");
     const funcoesLimpas = novoJogador.funcoes.filter(f => f.trim() !== '');
     if(funcoesLimpas.length === 0) return alert("Selecione pelo menos uma função.");
-    const payload = { nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', setor: novoJogador.setor, funcoes: funcoesLimpas, pe_dominante: novoJogador.pe_dominante, altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null };
+    const setorValue = setoresSelecionados.join(' | ');
+    const payload = { nome: novoJogador.nome, time_nome: novoJogador.time_nome, categoria: novoJogador.categoria || 'Sem Categoria', setor: setorValue, funcoes: funcoesLimpas, pe_dominante: novoJogador.pe_dominante, altura: parseFloat(novoJogador.altura) || 0, percentual_gordura: parseFloat(novoJogador.percentual_gordura) || 0, velocidade_maxima: parseFloat(novoJogador.velocidade_maxima) || 0, ano_nascimento: parseInt(novoJogador.ano_nascimento) || null };
     
     const acoesIniciais = {}; 
-    const listaBase = novoJogador.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+    const listaBase = setoresSelecionados.includes('GOLEIRO (GK)')
+      ? (setoresSelecionados.length > 1 ? [...ACOES_LINHA, ...ACOES_GOLEIRO] : ACOES_GOLEIRO)
+      : ACOES_LINHA;
     listaBase.forEach(a => acoesIniciais[a.id] = 0); 
     payload.acoes = acoesIniciais;
     
@@ -430,12 +436,17 @@ export default function App() {
       alert("Erro: " + error.message); 
     } else if (data) { 
       setPlayers([...safePlayers, data[0]]); 
-      setNovoJogador({ nome: '', time_nome: '', categoria: '', setor: '', funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
+      setNovoJogador({ nome: '', time_nome: '', categoria: '', setor: '', setores: [], funcoes: [''], altura: '', pe_dominante: 'Destro', percentual_gordura: '', velocidade_maxima: '', ano_nascimento: '' });
       alert("✅ Jogador adicionado!"); 
     }
   };
 
   const handleUpdatePlayerBio = async (playerId, updatedFields) => {
+    const setoresSelecionados = getPlayerSectors(updatedFields);
+    if (setoresSelecionados.length === 0) {
+      alert("Selecione pelo menos um setor.");
+      return false;
+    }
     const funcoesLimpas = (updatedFields.funcoes || []).filter(f => f.trim() !== '');
     if (funcoesLimpas.length === 0) {
       alert("Selecione pelo menos uma função.");
@@ -445,7 +456,7 @@ export default function App() {
       nome: updatedFields.nome,
       time_nome: updatedFields.time_nome,
       categoria: updatedFields.categoria || 'Sem Categoria',
-      setor: updatedFields.setor,
+      setor: setoresSelecionados.join(' | '),
       funcoes: funcoesLimpas,
       pe_dominante: updatedFields.pe_dominante,
       altura: parseFloat(updatedFields.altura) || 0,

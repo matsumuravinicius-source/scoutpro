@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getPlayerSectorLabel } from '../utils/playerSectors';
 
 export default function AbaComparativo({
   startDateA, setStartDateA, endDateA, setEndDateA, filterTeamA, setFilterTeamA, teams, filterCategoryA, setFilterCategoryA, uniqueCategories, filterSectorA, setFilterSectorA, SETORES, compareA, setCompareA, filteredPlayersA,
@@ -104,7 +105,7 @@ export default function AbaComparativo({
                   <select value={filterSectorA} onChange={e => setFilterSectorA(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none"><option value="">Todos os Setores</option>{Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}</select>
                 </div>
               </div>
-              <select value={compareA} onChange={e => setCompareA(e.target.value)} className="w-full p-3 bg-blue-900/20 border border-blue-900/50 text-blue-300 font-bold text-lg rounded-lg outline-none focus:ring-1 focus:ring-blue-500"><option value="">Selecione o Atleta A...</option>{filteredPlayersA.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.setor || 'S/ Setor'})</option>)}</select>
+              <select value={compareA} onChange={e => setCompareA(e.target.value)} className="w-full p-3 bg-blue-900/20 border border-blue-900/50 text-blue-300 font-bold text-lg rounded-lg outline-none focus:ring-1 focus:ring-blue-500"><option value="">Selecione o Atleta A...</option>{filteredPlayersA.map(p => <option key={p.id} value={p.id}>{p.nome} ({getPlayerSectorLabel(p)})</option>)}</select>
             </div>
 
             <div className="space-y-3 bg-gray-950 p-5 rounded-xl border border-gray-800 shadow-inner">
@@ -122,7 +123,7 @@ export default function AbaComparativo({
                   <select value={filterSectorB} onChange={e => setFilterSectorB(e.target.value)} className="p-2 bg-gray-900 rounded border border-gray-700 text-sm outline-none"><option value="">Todos os Setores</option>{Object.keys(SETORES).map(s => <option key={s} value={s}>{s}</option>)}</select>
                 </div>
               </div>
-              <select value={compareB} onChange={e => setCompareB(e.target.value)} className="w-full p-3 bg-orange-900/20 border border-orange-900/50 text-orange-300 font-bold text-lg rounded-lg outline-none focus:ring-1 focus:ring-orange-500"><option value="">Selecione o Atleta B...</option>{filteredPlayersB.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.setor || 'S/ Setor'})</option>)}</select>
+              <select value={compareB} onChange={e => setCompareB(e.target.value)} className="w-full p-3 bg-orange-900/20 border border-orange-900/50 text-orange-300 font-bold text-lg rounded-lg outline-none focus:ring-1 focus:ring-orange-500"><option value="">Selecione o Atleta B...</option>{filteredPlayersB.map(p => <option key={p.id} value={p.id}>{p.nome} ({getPlayerSectorLabel(p)})</option>)}</select>
             </div>
           </div>
 

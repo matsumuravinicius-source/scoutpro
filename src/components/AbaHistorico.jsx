@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CampoFutebol, { CORES_ACAO_CAMPO } from './CampoFutebol';
+import { getPlayerSectors } from '../utils/playerSectors';
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
@@ -391,7 +392,9 @@ export default function AbaHistorico({
                       <tbody>
                         {Object.keys(editingMatchId === partida.id ? editMatchData.dados : partida.dados).filter(id => id !== '_meta').map(playerId => {
                           const p = players.find(x => x.id === playerId) || { nome: 'Removido' };
-                          const isGoleiro = p.setor === 'GOLEIRO (GK)';
+                          const playerSectors = getPlayerSectors(p);
+                          const isGoleiro = playerSectors.includes('GOLEIRO (GK)');
+                          const isJogadorDeLinha = playerSectors.length === 0 || playerSectors.some(sector => sector !== 'GOLEIRO (GK)');
 
                           if (editingMatchId === partida.id) {
                             return (
@@ -421,7 +424,7 @@ export default function AbaHistorico({
                             <tr key={playerId} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">
                               <td className="p-2 font-bold sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">{p.nome}</td>
                               {TODAS_ACOES.map(a => {
-                                  const isValid = isGoleiro ? ACOES_GOLEIRO.some(ag => ag.id === a.id) : (!p.setor || ACOES_LINHA.some(al => al.id === a.id));
+                                  const isValid = (isGoleiro && ACOES_GOLEIRO.some(ag => ag.id === a.id)) || (isJogadorDeLinha && ACOES_LINHA.some(al => al.id === a.id));
                                   if (!isValid) return <td key={a.id} className="p-2 text-center text-gray-700">-</td>;
                                   return <td key={a.id} className="p-2 text-center font-mono text-gray-300">{partida.dados[playerId]?.[a.id] || 0}</td>
                               })}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
+import { getPlayerActions, getPlayerSectorLabel, getPlayerSectors } from '../utils/playerSectors';
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
@@ -63,6 +64,7 @@ export default function PerfilAtleta({
     time_nome: player?.time_nome || '',
     categoria: player?.categoria || '',
     setor: player?.setor || '',
+    setores: getPlayerSectors(player),
     funcoes: player?.funcoes?.length > 0 ? player.funcoes : [],
     altura: player?.altura || '',
     pe_dominante: player?.pe_dominante || 'Destro',
@@ -74,7 +76,9 @@ export default function PerfilAtleta({
 
   if (!player) return null;
 
-  const playerAcoes = player.setor === 'GOLEIRO (GK)' ? ACOES_GOLEIRO : ACOES_LINHA;
+  const playerAcoes = getPlayerActions(player, ACOES_LINHA, ACOES_GOLEIRO);
+  const editSectors = editForm.setores?.length ? editForm.setores : getPlayerSectors(editForm);
+  const editFunctions = [...new Set(editSectors.flatMap(sector => SETORES[sector] || []))];
 
   // Filtragem de partidas do atleta considerando os filtros locais de data e competição
   const partidasDoAtleta = (matchHistory || []).filter(m => {
@@ -245,6 +249,7 @@ export default function PerfilAtleta({
                   time_nome: player.time_nome || '',
                   categoria: player.categoria || '',
                   setor: player.setor || '',
+                  setores: getPlayerSectors(player),
                   funcoes: player.funcoes?.length ? player.funcoes : [],
                   altura: player.altura || '',
                   pe_dominante: player.pe_dominante || 'Destro',
@@ -312,6 +317,43 @@ export default function PerfilAtleta({
                 <input type="text" list="categorias-list" required value={editForm.categoria} onChange={e => setEditForm({...editForm, categoria: e.target.value})} className="w-full p-2.5 bg-gray-950 rounded-lg border border-gray-700 text-sm outline-none" />
               </div>
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Setores do campo</label>
+                <details className="bg-gray-950 rounded-lg border border-gray-700">
+                  <summary className="cursor-pointer list-none p-2.5 text-sm text-green-400 font-bold">{editSectors.length ? editSectors.join(' • ') : 'Selecione um ou mais setores...'}</summary>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 border-t border-gray-800">
+                    {Object.keys(SETORES).map(sector => <label key={sector} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={editSectors.includes(sector)} onChange={event => {
+                        const sectors = event.target.checked ? [...editSectors, sector] : editSectors.filter(value => value !== sector);
+                        const nextFunctions = [...new Set(sectors.flatMap(value => SETORES[value] || []))];
+                        setEditForm(previous => ({
+                          ...previous,
+                          setores: sectors,
+                          setor: sectors.join(' | '),
+                          funcoes: (previous.funcoes || []).filter(funcao => nextFunctions.includes(funcao))
+                        }));
+                      }} className="accent-blue-500" />
+                      {sector}
+                    </label>)}
+                  </div>
+                </details>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Funções / Papel</label>
+                {editSectors.length ? <div className="grid grid-cols-2 gap-2 bg-gray-950 p-3 rounded-lg border border-gray-800">
+                  {editFunctions.map(funcao => <label key={funcao} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                    <input type="checkbox" checked={(editForm.funcoes || []).includes(funcao)} onChange={event => setEditForm(previous => ({
+                      ...previous,
+                      funcoes: event.target.checked
+                        ? [...new Set([...(previous.funcoes || []), funcao])]
+                        : (previous.funcoes || []).filter(value => value !== funcao)
+                    }))} className="accent-blue-500" />
+                    {funcao}
+                  </label>)}
+                </div> : <p className="p-3 bg-gray-950 rounded-lg border border-gray-800 text-xs text-gray-500">Selecione pelo menos um setor para escolher as funções.</p>}
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pé dominante</label>
@@ -360,7 +402,7 @@ export default function PerfilAtleta({
                 </span>
               </div>
               <p className="text-sm text-green-400 font-bold mt-1.5">
-                {player.setor} <span className="text-gray-500 mx-1">|</span> <span className="text-gray-300">{player.funcoes?.join(' • ') || 'Sem função'}</span>
+                {getPlayerSectorLabel(player)} <span className="text-gray-500 mx-1">|</span> <span className="text-gray-300">{player.funcoes?.join(' • ') || 'Sem função'}</span>
               </p>
             </div>
           </div>
