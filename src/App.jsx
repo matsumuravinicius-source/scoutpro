@@ -10,7 +10,6 @@ import AbaHistorico from './components/AbaHistorico';
 import AbaAnalise from './components/AbaAnalise';
 import AbaRanking from './components/AbaRanking';
 import AbaComparativo from './components/AbaComparativo';
-import AbaRelatorios from './components/AbaRelatorios';
 import CampoFutebol, { CORES_ACAO_CAMPO } from './components/CampoFutebol';
 import { getPlayerActions, getPlayerSectors } from './utils/playerSectors';
 
@@ -782,7 +781,7 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleUpdateTeam={handleUpdateTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
+        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleUpdateTeam={handleUpdateTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
         
         {activeTab === 'scout' && (
           selectedProfilePlayer ? (
@@ -833,7 +832,6 @@ export default function App() {
         
         {activeTab === 'comparativo' && <AbaComparativo startDateA={startDateA} setStartDateA={setStartDateA} endDateA={endDateA} setEndDateA={setEndDateA} filterTeamA={filterTeamA} setFilterTeamA={setFilterTeamA} teams={teams} filterCategoryA={filterCategoryA} setFilterCategoryA={setFilterCategoryA} uniqueCategories={uniqueCategories} filterSectorA={filterSectorA} setFilterSectorA={setFilterSectorA} SETORES={SETORES} compareA={compareA} setCompareA={setCompareA} filteredPlayersA={filteredPlayersA} startDateB={startDateB} setStartDateB={setStartDateB} endDateB={endDateB} setEndDateB={setEndDateB} filterTeamB={filterTeamB} setFilterTeamB={setFilterTeamB} filterCategoryB={filterCategoryB} setFilterCategoryB={setFilterCategoryB} filterSectorB={filterSectorB} setFilterSectorB={setFilterSectorB} compareB={compareB} setCompareB={setCompareB} filteredPlayersB={filteredPlayersB} TODAS_ACOES={TODAS_ACOES} players={safePlayers} getComputedStats={getComputedStats} matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} />}
 
-        {activeTab === 'relatorios' && <AbaRelatorios teams={teams} players={safePlayers} matchHistory={safeMatchHistory} uniqueCompetitions={uniqueCompetitionsHistory} uniqueCategories={uniqueCategories} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} savedMetrics={savedMetrics} isDateInRange={isDateInRange} getIdade={getIdade} />}
       </main>
       {pendingFieldEvent && <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="w-full max-w-4xl bg-gray-900 border border-gray-700 rounded-2xl p-5 shadow-2xl space-y-4">

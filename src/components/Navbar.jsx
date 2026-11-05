@@ -9,8 +9,7 @@ export default function Navbar({ session, activeTab, setActiveTab }) {
     { id: 'historico', label: '📜 Histórico' },
     { id: 'analise', label: '📐 Análise Avançada' },
     { id: 'leaderboard', label: '🏆 Ranking' },
-    { id: 'comparativo', label: '⚔️ Comparativo' },
-    { id: 'relatorios', label: '📋 Relatórios' } // NOVA ABA AQUI
+    { id: 'comparativo', label: '⚔️ Comparativo' }
   ];
 
   return (

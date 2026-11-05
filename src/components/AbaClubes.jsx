@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
+import AbaRelatorios from './AbaRelatorios';
 import { getPlayerSectorLabel } from '../utils/playerSectors';
 
 const readShieldPhoto = file => new Promise((resolve, reject) => {
@@ -27,8 +28,9 @@ const readShieldPhoto = file => new Promise((resolve, reject) => {
 
 const EMPTY_TEAM_DETAILS = { country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' };
 
-export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleUpdateTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, onSelectPlayer }) {
+export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleUpdateTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, ACOES_LINHA = [], ACOES_GOLEIRO = [], onSelectPlayer }) {
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [isEditingTeam, setIsEditingTeam] = useState(false);
   const [editTeamForm, setEditTeamForm] = useState({ name: '', country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' });
   const [newTeamDetails, setNewTeamDetails] = useState(EMPTY_TEAM_DETAILS);
@@ -208,7 +210,8 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
                 {(selectedTeamDetails.country || selectedTeamDetails.division || selectedTeamDetails.categories?.length || selectedTeamDetails.foundedYear) && <p className="text-xs text-gray-500 mt-1">{[selectedTeamDetails.country, selectedTeamDetails.division, selectedTeamDetails.categories?.join(', '), selectedTeamDetails.foundedYear && `Fundado em ${selectedTeamDetails.foundedYear}`].filter(Boolean).join(' · ')}</p>}
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setIsReportOpen(true)} className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold text-white">📄 Gerar relatório</button>
               <button type="button" onClick={startEditingTeam} className="px-4 py-2.5 bg-blue-900/30 hover:bg-blue-900/60 rounded-lg border border-blue-900/50 text-sm font-bold text-blue-300">✏️ Editar clube</button>
               <button type="button" onClick={() => { setSelectedTeam(''); setFieldMapActionFilter(''); }} className="px-4 py-2.5 bg-gray-950 hover:bg-gray-800 rounded-lg border border-gray-700 text-sm font-bold text-gray-200">← Voltar para Clubes</button>
             </div>
@@ -328,6 +331,20 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
             </article>)}
           </div> : <p className="text-sm text-gray-500">Nenhuma partida registrada para este clube.</p>}
         </section>
+
+        {isReportOpen && <AbaRelatorios
+          targetType="clube"
+          targetId={selectedTeam}
+          onClose={() => setIsReportOpen(false)}
+          players={players}
+          teamMetadata={teamMetadata}
+          matchHistory={matchHistory}
+          uniqueCompetitions={uniqueCompetitions}
+          TODAS_ACOES={TODAS_ACOES}
+          ACOES_LINHA={ACOES_LINHA}
+          ACOES_GOLEIRO={ACOES_GOLEIRO}
+          isDateInRange={isDateInRange}
+        />}
       </div>
     );
   }

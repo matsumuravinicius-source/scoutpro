@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
+import AbaRelatorios from './AbaRelatorios';
 import { getPlayerActions, getPlayerSectorLabel, getPlayerSectors } from '../utils/playerSectors';
 
 const extractYouTubeId = (url) => {
@@ -42,6 +43,7 @@ export default function PerfilAtleta({
   handleSetGlobalAction, handleUpdateGlobalActions, handleDeletePlayer,
   onUpdatePlayerBio, matchHistory, isDateInRange, uniqueCompetitions
 }) {
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState({ 'Geral': true });
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [isEditingStats, setIsEditingStats] = useState(false);
@@ -233,6 +235,9 @@ export default function PerfilAtleta({
         </button>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          <button onClick={() => setIsReportOpen(true)} className="px-4 py-2 rounded-lg border border-blue-700 bg-blue-900/30 text-xs font-bold text-blue-200 hover:bg-blue-700 hover:text-white transition">
+            📄 Gerar relatório
+          </button>
           <button
             onClick={() => { setIsEditingStats(!isEditingStats); setSelectedActionForVideo(null); }}
             className={`px-4 py-2 rounded-lg text-xs font-bold border transition ${
@@ -535,6 +540,18 @@ export default function PerfilAtleta({
         </div>
 
       </div>
+      {isReportOpen && <AbaRelatorios
+        targetType="atleta"
+        targetId={player.id}
+        onClose={() => setIsReportOpen(false)}
+        players={[player]}
+        matchHistory={matchHistory}
+        uniqueCompetitions={uniqueCompetitions}
+        TODAS_ACOES={[...ACOES_LINHA, ...ACOES_GOLEIRO]}
+        ACOES_LINHA={ACOES_LINHA}
+        ACOES_GOLEIRO={ACOES_GOLEIRO}
+        isDateInRange={isDateInRange}
+      />}
     </div>
   );
 }

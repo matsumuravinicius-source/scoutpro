@@ -1,3 +1,61 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .report-print-area,
+  .report-print-area * {
+    visibility: visible !important;
+  }
+
+  .report-print-area {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .report-modal-header,
+  .report-builder {
+    display: none !important;
+  }
+
+  .report-layout {
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  .report-document {
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #111827 !important;
+    background: #fff !important;
+  }
+
+  .report-document * {
+    color: #111827 !important;
+    background-color: transparent !important;
+    border-color: #d1d5db !important;
+    box-shadow: none !important;
+  }
+
+  .report-document tr,
+  .report-document section {
+    break-inside: avoid;
+  }
+}
