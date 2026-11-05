@@ -33,21 +33,21 @@ export default function Navbar({ session, activeTab, setActiveTab }) {
           <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded font-mono uppercase">
             Analytics
           </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 hidden xl:inline">{session?.user?.email}</span>
           <button
             type="button"
             onClick={() => setIsMenuOpen(true)}
             aria-label="Abrir menu de navegação"
             aria-expanded={isMenuOpen}
             aria-controls="navigation-drawer"
-            className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-xs font-bold text-gray-200 transition hover:border-blue-500 hover:text-white"
+            className="ml-2 flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-xs font-bold text-gray-200 transition hover:border-blue-500 hover:text-white"
           >
             <span className="text-base leading-none">☰</span>
             <span>Menu</span>
           </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500 hidden xl:inline">{session?.user?.email}</span>
           <button
             onClick={() => supabase.auth.signOut()}
             className="text-xs bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1.5 rounded-lg border border-red-900/50 transition font-bold"
@@ -60,7 +60,7 @@ export default function Navbar({ session, activeTab, setActiveTab }) {
 
       {isMenuOpen && <div className="fixed inset-0 z-[60] print:hidden">
         <button type="button" aria-label="Fechar menu" onClick={() => setIsMenuOpen(false)} className="absolute inset-0 h-full w-full cursor-default bg-black/60 backdrop-blur-[1px]" />
-        <aside id="navigation-drawer" role="dialog" aria-modal="true" aria-label="Menu de navegação" className="absolute right-0 top-0 flex h-full w-[min(85vw,340px)] flex-col border-l border-gray-800 bg-gray-950 p-5 shadow-2xl animate-fadeIn">
+        <aside id="navigation-drawer" role="dialog" aria-modal="true" aria-label="Menu de navegação" className="absolute left-0 top-0 flex h-full w-[min(85vw,340px)] flex-col border-r border-gray-800 bg-gray-950 p-5 shadow-2xl animate-fadeIn">
           <div className="mb-5 flex items-center justify-between border-b border-gray-800 pb-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-400">Navegação</p>
