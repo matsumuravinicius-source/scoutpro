@@ -25,14 +25,7 @@ export default function Navbar({ session, activeTab, setActiveTab }) {
   return (
     <>
       <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-40 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center gap-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl font-black bg-gradient-to-r from-blue-500 to-green-400 bg-clip-text text-transparent">
-            SCOUTPRO
-          </span>
-          <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded font-mono uppercase">
-            Analytics
-          </span>
+        <div className="relative max-w-7xl mx-auto px-4 py-3 flex justify-between items-center gap-3">
           <button
             type="button"
             onClick={() => setIsMenuOpen(true)}
@@ -44,18 +37,22 @@ export default function Navbar({ session, activeTab, setActiveTab }) {
             <span className="text-base leading-none">☰</span>
             <span>Menu</span>
           </button>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 hidden xl:inline">{session?.user?.email}</span>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="text-xs bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1.5 rounded-lg border border-red-900/50 transition font-bold"
-          >
-            Sair
-          </button>
+          <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap" aria-label="ScoutPro Analytics">
+            <span className="text-lg font-black bg-gradient-to-r from-blue-500 to-green-400 bg-clip-text text-transparent sm:text-2xl">SCOUTPRO</span>
+            <span className="hidden rounded bg-gray-800 px-2 py-0.5 text-[10px] font-mono uppercase text-gray-400 md:inline-block">Analytics</span>
+          </div>
+
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-xs text-gray-500 xl:inline">{session?.user?.email}</span>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="text-xs bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1.5 rounded-lg border border-red-900/50 transition font-bold"
+            >
+              Sair
+            </button>
+          </div>
         </div>
-      </div>
       </header>
 
       {isMenuOpen && <div className="fixed inset-0 z-[60] print:hidden">
