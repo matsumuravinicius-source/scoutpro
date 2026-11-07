@@ -351,38 +351,39 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
 
   return (
     <div className="space-y-6">
-      <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-        <h2 className="text-2xl font-bold mb-2">Gestão de Clubes</h2>
-        <p className="text-sm text-gray-400 mb-6">Adicione clubes com dados de identificação e escudo.</p>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl">
+        <h2 className="text-xl font-bold mb-1">Gestão de Clubes</h2>
+        <p className="text-xs text-gray-400 mb-4">Adicione clubes com dados de identificação e escudo.</p>
         <form onSubmit={event => handleAddTeam(event, {
           country: newTeamDetails.country.trim(),
           division: newTeamDetails.division.trim(),
           categories: newTeamDetails.categories.split(',').map(category => category.trim()).filter(Boolean),
           foundedYear: newTeamDetails.foundedYear ? Number(newTeamDetails.foundedYear) : null,
           shieldPhoto: newTeamDetails.shieldPhoto
-        }).then(success => { if (success) setNewTeamDetails(EMPTY_TEAM_DETAILS); })} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        }).then(success => { if (success) setNewTeamDetails(EMPTY_TEAM_DETAILS); })} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label className="block text-xs font-bold text-gray-400">Nome do clube
-              <input type="text" placeholder="Nome do Novo Clube" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              <input type="text" placeholder="Nome do Novo Clube" required value={newTeamName} onChange={e => setNewTeamName(e.target.value)} className="mt-1 w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
             </label>
             <label className="block text-xs font-bold text-gray-400">País
-              <input type="text" placeholder="Ex.: Brasil" value={newTeamDetails.country} onChange={event => setNewTeamDetails(previous => ({ ...previous, country: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              <input type="text" placeholder="Ex.: Brasil" value={newTeamDetails.country} onChange={event => setNewTeamDetails(previous => ({ ...previous, country: event.target.value }))} className="mt-1 w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
             </label>
             <label className="block text-xs font-bold text-gray-400">Divisão
-              <input type="text" placeholder="Ex.: Série A" value={newTeamDetails.division} onChange={event => setNewTeamDetails(previous => ({ ...previous, division: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              <input type="text" placeholder="Ex.: Série A" value={newTeamDetails.division} onChange={event => setNewTeamDetails(previous => ({ ...previous, division: event.target.value }))} className="mt-1 w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
             </label>
             <label className="block text-xs font-bold text-gray-400">Categorias
-              <input type="text" placeholder="Ex.: Principal, Sub-20, Sub-17" value={newTeamDetails.categories} onChange={event => setNewTeamDetails(previous => ({ ...previous, categories: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              <input type="text" placeholder="Ex.: Principal, Sub-20, Sub-17" value={newTeamDetails.categories} onChange={event => setNewTeamDetails(previous => ({ ...previous, categories: event.target.value }))} className="mt-1 w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
               <span className="block mt-1 text-[10px] text-gray-600">Separe as categorias por vírgula.</span>
             </label>
             <label className="block text-xs font-bold text-gray-400">Ano de fundação
-              <input type="number" min="1800" max={new Date().getFullYear()} placeholder="Ex.: 1910" value={newTeamDetails.foundedYear} onChange={event => setNewTeamDetails(previous => ({ ...previous, foundedYear: event.target.value }))} className="mt-1 w-full p-3 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
+              <input type="number" min="1800" max={new Date().getFullYear()} placeholder="Ex.: 1910" value={newTeamDetails.foundedYear} onChange={event => setNewTeamDetails(previous => ({ ...previous, foundedYear: event.target.value }))} className="mt-1 w-full p-2 bg-gray-950 rounded-lg border border-gray-700 text-sm text-white outline-none focus:border-blue-500" />
             </label>
-            <div className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-950 p-3">
-              {newTeamDetails.shieldPhoto ? <img src={newTeamDetails.shieldPhoto} alt="Pré-visualização do escudo" className="w-14 h-14 object-cover rounded-lg border border-gray-700" /> : <div className="w-14 h-14 rounded-lg border border-gray-700 flex items-center justify-center text-2xl text-gray-500">🛡️</div>}
+            <div className="flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-950 p-2">
+              {newTeamDetails.shieldPhoto ? <img src={newTeamDetails.shieldPhoto} alt="Pré-visualização do escudo" className="w-11 h-11 object-cover rounded-lg border border-gray-700" /> : <div className="w-11 h-11 rounded-lg border border-gray-700 flex items-center justify-center text-xl text-gray-500">🛡️</div>}
               <div className="min-w-0">
-                <span className="block text-xs font-bold text-gray-400 mb-2">Foto do escudo</span>
-                <label className="inline-block cursor-pointer px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-xs font-bold text-gray-200">
+                <span className="block text-xs font-bold text-gray-400 mb-1">Foto do escudo</span>
+                <label className="inline-block cursor-pointer px-2 py-1.5 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 text-[11px] font-bold text-gray-200">
                   Escolher imagem
                   <input type="file" accept="image/*" onChange={handleShieldPhotoChange} className="hidden" />
                 </label>
@@ -390,30 +391,30 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
               </div>
             </div>
           </div>
-          <button type="submit" className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-lg">Adicionar Clube</button>
+          <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-sm text-white font-bold rounded-lg transition shadow-lg">Adicionar Clube</button>
         </form>
       </div>
 
-      <section className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
-        <div className="mb-4">
+      <section className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-xl">
+        <div className="mb-3">
           <h2 className="text-xl font-bold">🏆 Gestão de Competições</h2>
-          <p className="mt-1 text-sm text-gray-400">Cadastre a competição, sua categoria e o país onde é disputada.</p>
+          <p className="mt-1 text-xs text-gray-400">Cadastre a competição, sua categoria e o país onde é disputada.</p>
         </div>
-        <form onSubmit={handleAddCompetition} className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 items-end">
-          <label className="block text-xs font-bold text-gray-400">Nome da competição
-            <input type="text" placeholder="Ex.: Campeonato Brasileiro" required value={newCompetitionName} onChange={event => setNewCompetitionName(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-white outline-none focus:border-blue-500" />
+        <form onSubmit={handleAddCompetition} className="grid grid-cols-1 gap-2 sm:grid-cols-2 items-end">
+          <label className="block text-xs font-bold text-gray-400 sm:col-span-2">Nome da competição
+            <input type="text" placeholder="Ex.: Campeonato Brasileiro" required value={newCompetitionName} onChange={event => setNewCompetitionName(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-sm text-white outline-none focus:border-blue-500" />
           </label>
           <label className="block text-xs font-bold text-gray-400">Categoria
-            <input type="text" placeholder="Ex.: Principal, Sub-20, Feminino" value={newCompetitionCategory} onChange={event => setNewCompetitionCategory(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-white outline-none focus:border-blue-500" />
+            <input type="text" placeholder="Ex.: Principal, Sub-20, Feminino" value={newCompetitionCategory} onChange={event => setNewCompetitionCategory(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-sm text-white outline-none focus:border-blue-500" />
           </label>
           <label className="block text-xs font-bold text-gray-400">País de disputa
-            <input type="text" placeholder="Ex.: Brasil" value={newCompetitionCountry} onChange={event => setNewCompetitionCountry(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-white outline-none focus:border-blue-500" />
+            <input type="text" placeholder="Ex.: Brasil" value={newCompetitionCountry} onChange={event => setNewCompetitionCountry(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-sm text-white outline-none focus:border-blue-500" />
           </label>
-          <button type="submit" className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500">Adicionar competição</button>
+          <button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500 sm:col-span-2">Adicionar competição</button>
         </form>
         <div className="mt-5 border-t border-gray-800 pt-4">
           <h3 className="mb-3 text-sm font-bold text-gray-300">Competições cadastradas ({competitions.length})</h3>
-          {competitions.length ? <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+          {competitions.length ? <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
             {competitions.map(competition => {
               const details = competitionDetails.find(item => item.nome === competition) || {};
               return <div key={competition} className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 bg-gray-950 p-3">
@@ -427,6 +428,7 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
           </div> : <p className="text-xs text-gray-500">Nenhuma competição cadastrada.</p>}
         </div>
       </section>
+      </div>
 
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
         
