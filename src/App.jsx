@@ -114,7 +114,10 @@ export default function App() {
   const [matchHistory, setMatchHistory] = useState([]);
   
   const [competitions, setCompetitions] = useState([]);
+  const [competitionDetails, setCompetitionDetails] = useState([]);
   const [newCompetitionName, setNewCompetitionName] = useState('');
+  const [newCompetitionCategory, setNewCompetitionCategory] = useState('');
+  const [newCompetitionCountry, setNewCompetitionCountry] = useState('');
   
   const [filterTeam, setFilterTeam] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -273,8 +276,17 @@ export default function App() {
         ...(team.metadata || {})
       }])));
     }
-    const { data: compData } = await supabase.from('competicoes').select('nome').order('nome');
-    if (compData) setCompetitions(compData.map(c => c.nome));
+    const { data: compData, error: compError } = await supabase.from('competicoes').select('nome,categoria,pais').order('nome');
+    if (!compError && compData) {
+      setCompetitions(compData.map(competition => competition.nome));
+      setCompetitionDetails(compData);
+    } else {
+      const { data: legacyCompData } = await supabase.from('competicoes').select('nome').order('nome');
+      if (legacyCompData) {
+        setCompetitions(legacyCompData.map(competition => competition.nome));
+        setCompetitionDetails(legacyCompData.map(competition => ({ ...competition, categoria: '', pais: '' })));
+      }
+    }
     const { data: jogadoresData } = await supabase.from('jogadores').select('*');
     if (jogadoresData) {
       const jogadoresFormatados = jogadoresData.map(j => {
@@ -292,9 +304,18 @@ export default function App() {
 
   const handleAddCompetition = async (e) => {
     e.preventDefault();
-    if (!newCompetitionName.trim() || competitions.includes(newCompetitionName.trim())) return alert("Aviso: Competição inválida ou já existe.");
-    const { error } = await supabase.from('competicoes').insert([{ nome: newCompetitionName.trim() }]);
-    if (error) { alert("Erro: " + error.message); } else { setCompetitions([...competitions, newCompetitionName.trim()].sort()); setNewCompetitionName(''); alert("✅ Competição adicionada!"); }
+    const nome = newCompetitionName.trim();
+    if (!nome || competitions.includes(nome)) return alert("Aviso: Competição inválida ou já existe.");
+    const competition = { nome, categoria: newCompetitionCategory.trim(), pais: newCompetitionCountry.trim() };
+    const { error } = await supabase.from('competicoes').insert([competition]);
+    if (error) { alert("Erro: " + error.message); } else {
+      setCompetitions([...competitions, nome].sort());
+      setCompetitionDetails([...competitionDetails, competition].sort((a, b) => a.nome.localeCompare(b.nome)));
+      setNewCompetitionName('');
+      setNewCompetitionCategory('');
+      setNewCompetitionCountry('');
+      alert("✅ Competição adicionada!");
+    }
   };
 
   const handleAddTeam = async (e, metadata = {}) => {
@@ -398,6 +419,7 @@ export default function App() {
     await supabase.from('competicoes').delete().eq('nome', compName);
     setMatchHistory(safeMatchHistory.filter(m => m.dados?._meta?.competicao !== compName));
     setCompetitions(competitions.filter(c => c !== compName));
+    setCompetitionDetails(competitionDetails.filter(competition => competition.nome !== compName));
     alert(`✅ Competição "${compName}" excluída com sucesso!`);
   };
 
@@ -781,7 +803,7 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleUpdateTeam={handleUpdateTeam} handleDeleteTeam={handleDeleteTeam} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
+        {activeTab === 'clubes' && <AbaClubes teams={teams} teamMetadata={teamMetadata} players={safePlayers} matchHistory={safeMatchHistory} newTeamName={newTeamName} setNewTeamName={setNewTeamName} handleAddTeam={handleAddTeam} handleUpdateTeam={handleUpdateTeam} handleDeleteTeam={handleDeleteTeam} competitions={competitions} competitionDetails={competitionDetails} newCompetitionName={newCompetitionName} setNewCompetitionName={setNewCompetitionName} newCompetitionCategory={newCompetitionCategory} setNewCompetitionCategory={setNewCompetitionCategory} newCompetitionCountry={newCompetitionCountry} setNewCompetitionCountry={setNewCompetitionCountry} handleAddCompetition={handleAddCompetition} handleDeleteCompetition={handleDeleteCompetition} uniqueCompetitions={uniqueCompetitionsHistory} isDateInRange={isDateInRange} TODAS_ACOES={TODAS_ACOES} ACOES_LINHA={ACOES_LINHA} ACOES_GOLEIRO={ACOES_GOLEIRO} onSelectPlayer={id => { setSelectedPlayerProfileId(id); setActiveTab('scout'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
         
         {activeTab === 'scout' && (
           selectedProfilePlayer ? (
@@ -813,11 +835,6 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               SETORES={SETORES}
-              competitions={competitions}
-              newCompetitionName={newCompetitionName}
-              setNewCompetitionName={setNewCompetitionName}
-              handleAddCompetition={handleAddCompetition}
-              handleDeleteCompetition={handleDeleteCompetition}
             />
           )
         )}

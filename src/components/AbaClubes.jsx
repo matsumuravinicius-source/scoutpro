@@ -28,7 +28,7 @@ const readShieldPhoto = file => new Promise((resolve, reject) => {
 
 const EMPTY_TEAM_DETAILS = { country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' };
 
-export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleUpdateTeam, handleDeleteTeam, uniqueCompetitions, isDateInRange, TODAS_ACOES, ACOES_LINHA = [], ACOES_GOLEIRO = [], onSelectPlayer }) {
+export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleUpdateTeam, handleDeleteTeam, competitions = [], competitionDetails = [], newCompetitionName, setNewCompetitionName, newCompetitionCategory, setNewCompetitionCategory, newCompetitionCountry, setNewCompetitionCountry, handleAddCompetition, handleDeleteCompetition, uniqueCompetitions, isDateInRange, TODAS_ACOES, ACOES_LINHA = [], ACOES_GOLEIRO = [], onSelectPlayer }) {
   const [selectedTeam, setSelectedTeam] = useState('');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isEditingTeam, setIsEditingTeam] = useState(false);
@@ -393,6 +393,40 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
           <button type="submit" className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition shadow-lg">Adicionar Clube</button>
         </form>
       </div>
+
+      <section className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold">🏆 Gestão de Competições</h2>
+          <p className="mt-1 text-sm text-gray-400">Cadastre a competição, sua categoria e o país onde é disputada.</p>
+        </div>
+        <form onSubmit={handleAddCompetition} className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 items-end">
+          <label className="block text-xs font-bold text-gray-400">Nome da competição
+            <input type="text" placeholder="Ex.: Campeonato Brasileiro" required value={newCompetitionName} onChange={event => setNewCompetitionName(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-white outline-none focus:border-blue-500" />
+          </label>
+          <label className="block text-xs font-bold text-gray-400">Categoria
+            <input type="text" placeholder="Ex.: Principal, Sub-20, Feminino" value={newCompetitionCategory} onChange={event => setNewCompetitionCategory(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-white outline-none focus:border-blue-500" />
+          </label>
+          <label className="block text-xs font-bold text-gray-400">País de disputa
+            <input type="text" placeholder="Ex.: Brasil" value={newCompetitionCountry} onChange={event => setNewCompetitionCountry(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-white outline-none focus:border-blue-500" />
+          </label>
+          <button type="submit" className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500">Adicionar competição</button>
+        </form>
+        <div className="mt-5 border-t border-gray-800 pt-4">
+          <h3 className="mb-3 text-sm font-bold text-gray-300">Competições cadastradas ({competitions.length})</h3>
+          {competitions.length ? <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+            {competitions.map(competition => {
+              const details = competitionDetails.find(item => item.nome === competition) || {};
+              return <div key={competition} className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 bg-gray-950 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-blue-300">{competition}</p>
+                  <p className="mt-1 text-[11px] text-gray-500">{[details.categoria, details.pais].filter(Boolean).join(' · ') || 'Categoria e país não informados'}</p>
+                </div>
+                <button type="button" onClick={() => handleDeleteCompetition(competition)} className="shrink-0 rounded bg-red-900/20 p-2 text-xs text-red-400 transition hover:bg-red-600 hover:text-white" title="Excluir competição e partidas">🗑️</button>
+              </div>;
+            })}
+          </div> : <p className="text-xs text-gray-500">Nenhuma competição cadastrada.</p>}
+        </div>
+      </section>
 
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
         

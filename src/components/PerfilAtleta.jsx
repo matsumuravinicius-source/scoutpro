@@ -231,7 +231,7 @@ export default function PerfilAtleta({
           onClick={onBack}
           className="flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-white bg-gray-950 hover:bg-gray-800 px-4 py-2.5 rounded-lg border border-gray-700 transition"
         >
-          ⬅️ Voltar para Base de Dados
+          ⬅️ Voltar para Jogadores
         </button>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">

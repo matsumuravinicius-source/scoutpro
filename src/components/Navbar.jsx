@@ -5,7 +5,7 @@ export default function Navbar({ session, activeTab, setActiveTab }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const tabs = [
     { id: 'clubes', label: '🛡️ Clubes' },
-    { id: 'scout', label: '🗂️ Base de Dados' },
+    { id: 'scout', label: '🗂️ Jogadores' },
     { id: 'live', label: '🔴 Live Match' },
     { id: 'historico', label: '📜 Histórico' },
     { id: 'analise', label: '📐 Análise Avançada' },
