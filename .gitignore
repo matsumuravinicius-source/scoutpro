@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 ScoutPro-Instalador/
 dist/
+
+# Local source videos and generated AI training data
+ai_pipeline/videos/
+ai_pipeline/data/
+__pycache__/
+*.py[cod]
