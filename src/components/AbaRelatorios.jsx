@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getPlayerActions, getPlayerSectorLabel } from '../utils/playerSectors';
+import { getLiveTeamStats, getTeamGoalsConceded } from '../utils/matchTeams';
 
 const toCount = value => Number.parseInt(value, 10) || 0;
 const formatDate = value => {
@@ -80,6 +81,7 @@ export default function AbaRelatorios({
       });
     } else {
       filteredMatches.forEach(match => {
+        if (match.dados?._meta?.liveMode === 'positions') return;
         Object.entries(match.dados || {}).forEach(([playerId, actions]) => {
           if (playerId === '_meta' || !teamPlayerIds.has(String(playerId))) return;
           Object.entries(actions || {}).forEach(([key, value]) => {
@@ -88,9 +90,22 @@ export default function AbaRelatorios({
         });
       });
     }
+    filteredMatches.filter(match => match.dados?._meta?.liveMode === 'positions').forEach(match => {
+      Object.entries(getLiveTeamStats(match.dados._meta, teamName)).forEach(([key, value]) => {
+        if (key === 'minutos' || key === 'partidas') return;
+        stats[key] = (stats[key] || 0) + toCount(value);
+      });
+    });
     stats.partidas = filteredMatches.length;
-    stats.gols_sofridos = filteredMatches.reduce((total, match) => total + toCount(match.dados?._meta?.gols_sofridos), 0);
-    stats.finalizacoes_adversario = filteredMatches.reduce((total, match) => total + toCount(match.dados?._meta?.finalizacoes_adversario), 0);
+    stats.gols_sofridos = filteredMatches.reduce((total, match) => total + getTeamGoalsConceded(match.dados?._meta, teamName), 0);
+    stats.finalizacoes_adversario = filteredMatches.reduce((total, match) => {
+      const meta = match.dados?._meta;
+      if (meta?.liveMode !== 'positions') return total + toCount(meta?.finalizacoes_adversario);
+      const homeTeam = meta.equipes?.[0] || meta.homeTeam;
+      const awayTeam = meta.equipes?.[1] || meta.awayTeam;
+      const opponent = getLiveTeamStats(meta, teamName === homeTeam ? awayTeam : homeTeam);
+      return total + toCount(opponent.gols) + toCount(opponent.finalizacoes_certas) + toCount(opponent.finalizacoes_erradas);
+    }, 0);
   }
 
   const reportTitle = title.trim() || (isPlayerReport ? `Relatório de ${player?.nome || 'atleta'}` : `Relatório de ${teamName || 'clube'}`);

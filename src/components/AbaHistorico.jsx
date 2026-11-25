@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import CampoFutebol, { CORES_ACAO_CAMPO } from './CampoFutebol';
 import { getPlayerSectors } from '../utils/playerSectors';
+import { LIVE_ACTION_GROUPS, getFormationPositions, formatPositionActionLog, collectPositionTeamStats, getPositionActionColor } from '../utils/liveMatchActions';
+
+const positionActionIds = new Set(LIVE_ACTION_GROUPS.flatMap(group => group.options.map(option => option.id)));
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
@@ -36,6 +39,7 @@ export default function AbaHistorico({
   // NOVOS ESTADOS: Filtros de Ação e de Atleta para a Linha do Tempo de cada partida
   const [timelineActionFilter, setTimelineActionFilter] = useState({});
   const [timelinePlayerFilter, setTimelinePlayerFilter] = useState({});
+  const [timelineTeamFilter, setTimelineTeamFilter] = useState({});
   const [fieldMapActionFilter, setFieldMapActionFilter] = useState({});
   const [fieldMapPeriodFilter, setFieldMapPeriodFilter] = useState({});
 
@@ -60,6 +64,48 @@ export default function AbaHistorico({
     setVideoSeekState(prev => ({ ...prev, [partida.id]: targetSecond }));
   };
 
+  const revisePositionEvents = (meta, events, fieldEvents) => {
+    const homeTeam = meta.equipes?.[0] || meta.homeTeam;
+    const awayTeam = meta.equipes?.[1] || meta.awayTeam;
+    const liveActionEvents = events.map(event => ({ ...event, teamName: event.teamSide === 'away' ? awayTeam : homeTeam }));
+    const teamStats = collectPositionTeamStats(liveActionEvents, homeTeam, awayTeam);
+    const awayStats = teamStats[awayTeam] || {};
+    return { ...meta, homeTeam, awayTeam, liveActionEvents, fieldEvents, teamStats,
+      eventLog: liveActionEvents.slice().reverse().map(formatPositionActionLog),
+      gols_sofridos: awayStats.gols || 0,
+      finalizacoes_adversario: (awayStats.gols || 0) + (awayStats.finalizacoes_certas || 0) + (awayStats.finalizacoes_erradas || 0) };
+  };
+
+  const updatePositionAction = (eventId, changes) => setEditMatchData(previous => {
+    const meta = previous?.dados?._meta;
+    if (meta?.liveMode !== 'positions') return previous;
+    const original = (meta.liveActionEvents || []).find(event => event.id === eventId);
+    if (!original) return previous;
+    const next = { ...original, ...changes };
+    const formation = meta.formations?.[next.teamSide];
+    const positions = getFormationPositions(formation);
+    const changedTeam = next.teamSide !== original.teamSide;
+    const positionId = changedTeam ? '' : next.positionId;
+    const position = positions.find(item => item.id === positionId);
+    const action = TODAS_ACOES.find(item => item.id === next.actionId && positionActionIds.has(item.id));
+    if (!action || !positions.length || !['home', 'away'].includes(next.teamSide) || (positionId && !position)) return previous;
+    Object.assign(next, { playerId: null, positionId: position?.id || '', positionLabel: position?.label || '',
+      formation, teamName: next.teamSide === 'away' ? (meta.equipes?.[1] || meta.awayTeam) : (meta.equipes?.[0] || meta.homeTeam),
+      label: action.nome, seconds: timeToSeconds(next.time) });
+    const events = meta.liveActionEvents.map(event => event.id === eventId ? next : event);
+    const fieldEvents = (meta.fieldEvents || []).flatMap(event => event.id !== eventId ? [event]
+      : CORES_ACAO_CAMPO[next.actionId] ? [{ ...event, ...next, color: getPositionActionColor(next) }] : []);
+    return { ...previous, dados: { ...previous.dados, _meta: revisePositionEvents(meta, events, fieldEvents) } };
+  });
+
+  const removePositionAction = eventId => setEditMatchData(previous => {
+    const meta = previous?.dados?._meta;
+    if (meta?.liveMode !== 'positions') return previous;
+    const events = (meta.liveActionEvents || []).filter(event => event.id !== eventId);
+    const fieldEvents = (meta.fieldEvents || []).filter(event => event.id !== eventId);
+    return { ...previous, dados: { ...previous.dados, _meta: revisePositionEvents(meta, events, fieldEvents) } };
+  });
+
   const updateLoggedAction = (logIndex, changes) => setEditMatchData(previous => {
     if (!previous?.dados?._meta) return previous;
     const meta = previous.dados._meta;
@@ -74,6 +120,19 @@ export default function AbaHistorico({
     const nextAction = TODAS_ACOES.find(action => action.id === next.actionId) || oldAction;
     if (!nextPlayer || !nextAction) return previous;
 
+    const isLiveActionMatch = meta.liveMode === 'actions';
+    const homeTeam = meta.equipes?.[0] || meta.homeTeam;
+    const awayTeam = meta.equipes?.[1] || meta.awayTeam;
+    const teamSide = nextPlayer.time_nome === homeTeam ? 'home' : nextPlayer.time_nome === awayTeam ? 'away' : undefined;
+    const actionUpdate = {
+      playerId: nextPlayer.id,
+      playerName: nextPlayer.nome,
+      actionId: nextAction.id,
+      label: nextAction.nome,
+      period: Number(next.period),
+      time: next.time,
+      ...(isLiveActionMatch ? { teamName: nextPlayer.time_nome, teamSide, seconds: timeToSeconds(next.time) } : {})
+    };
     logs[logIndex] = `[T${next.period} - ${next.time}] ${nextPlayer.nome} • ${nextAction.nome}`;
     let fieldEvents = meta.fieldEvents || [];
     const fieldEventIndex = fieldEvents.findIndex(event => event.playerId === oldPlayer?.id && event.actionId === oldAction?.id && Number(event.period) === parsed.period && event.time === parsed.time);
@@ -81,21 +140,23 @@ export default function AbaHistorico({
       fieldEvents = [...fieldEvents];
       const replacement = { ...fieldEvents[fieldEventIndex] };
       if (CORES_ACAO_CAMPO[nextAction.id]) {
+        const isAwayShot = isLiveActionMatch && teamSide === 'away' && ['gols', 'finalizacoes_certas', 'finalizacoes_erradas'].includes(nextAction.id);
         Object.assign(replacement, {
-          playerId: nextPlayer.id,
-          playerName: nextPlayer.nome,
-          actionId: nextAction.id,
-          label: nextAction.nome,
-          period: Number(next.period),
-          time: next.time,
-          color: CORES_ACAO_CAMPO[nextAction.id]
+          ...actionUpdate,
+          color: isAwayShot ? (nextAction.id === 'gols' ? '#f97316' : '#eab308') : CORES_ACAO_CAMPO[nextAction.id]
         });
         fieldEvents[fieldEventIndex] = replacement;
       } else {
         fieldEvents.splice(fieldEventIndex, 1);
       }
     }
-    return { ...previous, dados: { ...previous.dados, _meta: { ...meta, eventLog: logs, fieldEvents } } };
+    let liveActionEvents = meta.liveActionEvents;
+    if (isLiveActionMatch && Array.isArray(liveActionEvents)) {
+      const liveActionIndex = liveActionEvents.findIndex(event => event.playerId === oldPlayer?.id && event.actionId === oldAction?.id && Number(event.period) === parsed.period && event.time === parsed.time);
+      liveActionEvents = liveActionEvents.map((event, index) => index === liveActionIndex ? { ...event, ...actionUpdate } : event);
+    }
+    return { ...previous, dados: { ...previous.dados, _meta: { ...meta, eventLog: logs, fieldEvents,
+      ...(isLiveActionMatch && Array.isArray(liveActionEvents) ? { liveActionEvents } : {}) } } };
   });
 
   const removeLoggedAction = logIndex => setEditMatchData(previous => {
@@ -109,7 +170,13 @@ export default function AbaHistorico({
     let fieldEvents = meta.fieldEvents || [];
     const fieldEventIndex = fieldEvents.findIndex(event => event.playerId === player?.id && event.actionId === action?.id && Number(event.period) === parsed?.period && event.time === parsed?.time);
     if (fieldEventIndex >= 0) fieldEvents = fieldEvents.filter((_, index) => index !== fieldEventIndex);
-    return { ...previous, dados: { ...previous.dados, _meta: { ...meta, eventLog: logs, fieldEvents } } };
+    let liveActionEvents = meta.liveActionEvents;
+    if (meta.liveMode === 'actions' && Array.isArray(liveActionEvents)) {
+      const liveActionIndex = liveActionEvents.findIndex(event => event.playerId === player?.id && event.actionId === action?.id && Number(event.period) === parsed?.period && event.time === parsed?.time);
+      if (liveActionIndex >= 0) liveActionEvents = liveActionEvents.filter((_, index) => index !== liveActionIndex);
+    }
+    return { ...previous, dados: { ...previous.dados, _meta: { ...meta, eventLog: logs, fieldEvents,
+      ...(meta.liveMode === 'actions' && Array.isArray(liveActionEvents) ? { liveActionEvents } : {}) } } };
   });
 
   return (
@@ -137,9 +204,29 @@ export default function AbaHistorico({
 
           // Extração inteligente das Ações e Atletas presentes na Linha do Tempo desta partida
           const editingThisMatch = editingMatchId === partida.id;
-          const rawLogs = editingThisMatch ? (editMatchData?.dados?._meta?.eventLog || []) : (partida.dados?._meta?.eventLog || []);
+          const displayMeta = editingThisMatch ? (editMatchData?.dados?._meta || {}) : (partida.dados?._meta || {});
+          const isPositionMatch = displayMeta.liveMode === 'positions';
+          const reportMeta = isPositionMatch ? displayMeta : (partida.dados?._meta || {});
+          const positionEvents = isPositionMatch ? (displayMeta.liveActionEvents || []).slice().reverse().map(event => ({
+            ...event, teamName: event.teamSide === 'away' ? (displayMeta.equipes?.[1] || displayMeta.awayTeam) : (displayMeta.equipes?.[0] || displayMeta.homeTeam)
+          })) : [];
+          const rawLogs = isPositionMatch ? positionEvents.map(formatPositionActionLog)
+            : editingThisMatch ? (editMatchData?.dados?._meta?.eventLog || []) : (partida.dados?._meta?.eventLog || []);
           const selectedAction = timelineActionFilter[partida.id] || '';
           const selectedPlayer = timelinePlayerFilter[partida.id] || '';
+          const selectedTeam = timelineTeamFilter[partida.id] || '';
+          const filteredPositionEvents = positionEvents.filter(event => (!selectedAction || event.label === selectedAction)
+            && (!selectedPlayer || event.positionId === selectedPlayer) && (!selectedTeam || event.teamSide === selectedTeam));
+          const positionsInLogs = [...new Map(positionEvents.map(event => [event.positionId, event.positionLabel])).entries()];
+          const positionRows = [...positionEvents.reduce((rows, event) => {
+            const key = `${event.teamSide}:${event.positionId}`;
+            const row = rows.get(key) || { key, teamName: event.teamName, positionLabel: event.positionLabel, actions: {}, total: 0 };
+            row.actions[event.actionId] = (row.actions[event.actionId] || 0) + 1;
+            row.total += 1;
+            rows.set(key, row);
+            return rows;
+          }, new Map()).values()];
+          const positionActions = TODAS_ACOES.filter(action => positionEvents.some(event => event.actionId === action.id));
 
           const uniqueActionsInLogs = [...new Set(rawLogs.map(log => {
             if (log.includes('•')) return log.split('•')[1].trim();
@@ -176,7 +263,7 @@ export default function AbaHistorico({
             return true;
           });
 
-          const fieldEvents = partida.dados?._meta?.fieldEvents || [];
+          const fieldEvents = (isPositionMatch ? displayMeta.fieldEvents : partida.dados?._meta?.fieldEvents) || [];
           const actionFilter = fieldMapActionFilter[partida.id] || '';
           const periodFilter = fieldMapPeriodFilter[partida.id] || '';
           const actions = [...new Map(fieldEvents.map(event => [event.actionId, event.label || event.actionId])).entries()];
@@ -216,7 +303,7 @@ export default function AbaHistorico({
                 ) : (
                   <div>
                     <h3 className="font-bold text-lg text-blue-400 flex flex-wrap items-center gap-2">
-                      {partida.dados?._meta?.competicao && <span className="bg-blue-900/30 text-blue-300 text-[10px] px-2 py-0.5 rounded uppercase border border-blue-900/50">{partida.dados._meta.competicao}</span>}
+                      {partida.dados?._meta?.competicao && <span className="bg-blue-900/30 text-blue-300 text-[10px] px-2 py-0.5 rounded uppercase border border-blue-900/50">{reportMeta.competicao}</span>}
                       {partida.titulo}
                       {ytId && <span className="bg-red-900/30 text-red-400 text-[10px] px-2 py-0.5 rounded border border-red-900/50">🎥 Vídeo Disponível</span>}
                     </h3>
@@ -234,9 +321,9 @@ export default function AbaHistorico({
               
               {expandedMatch === partida.id && (
                 <div className="p-4">
-                  {partida.dados._meta && (
+                  {reportMeta && (
                      <div className="mb-6 space-y-4">
-                        {(partida.dados._meta.fieldEvents?.length > 0 || partida.dados._meta.periodLogs?.length > 0 || partida.dados._meta.gols_sofridos > 0 || partida.dados._meta.finalizacoes_adversario > 0 || partida.dados._meta.ultimo_terco_adversario > 0) && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                        {(reportMeta.fieldEvents?.length > 0 || reportMeta.periodLogs?.length > 0 || reportMeta.gols_sofridos > 0 || reportMeta.finalizacoes_adversario > 0 || reportMeta.ultimo_terco_adversario > 0) && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                         {fieldEvents.length > 0 && <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-3">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div>
@@ -251,24 +338,24 @@ export default function AbaHistorico({
                           <div className="max-w-xl"><CampoFutebol events={visibleEvents} title="" orientation="horizontal" /></div>
                         </div>}
                         <div className="space-y-4">
-                          {partida.dados._meta.periodLogs?.length > 0 && (
+                          {reportMeta.periodLogs?.length > 0 && (
                              <div className="bg-gray-950 p-3 rounded-lg border border-gray-800">
                                <h4 className="text-gray-400 font-bold text-sm mb-2">Duração (Tempos):</h4>
-                               {partida.dados._meta.periodLogs.map((log, index) => {
+                               {reportMeta.periodLogs.map((log, index) => {
                                  const period = Number(log.match(/^(\d+)º Tempo:/)?.[1]);
                                  const isSelected = fieldMapPeriodFilter[partida.id] === period;
-                                 return <button key={index} type="button" disabled={!period || !partida.dados._meta.fieldEvents?.length} onClick={() => setFieldMapPeriodFilter(previous => ({ ...previous, [partida.id]: isSelected ? '' : period }))} className={`block w-full text-left font-mono text-sm rounded px-2 py-1 transition ${isSelected ? 'bg-blue-900/40 text-blue-200' : 'text-blue-400 hover:bg-gray-900'} disabled:cursor-default disabled:hover:bg-transparent`} title={partida.dados._meta.fieldEvents?.length ? 'Clique para filtrar o mapa por este tempo' : 'Esta partida não tem ações marcadas no mapa'}>
-                                   {log}{partida.dados._meta.fieldEvents?.length > 0 && <span className="ml-2 text-[10px] text-gray-500">{isSelected ? 'Mapa filtrado' : 'Filtrar mapa'}</span>}
+                                 return <button key={index} type="button" disabled={!period || !reportMeta.fieldEvents?.length} onClick={() => setFieldMapPeriodFilter(previous => ({ ...previous, [partida.id]: isSelected ? '' : period }))} className={`block w-full text-left font-mono text-sm rounded px-2 py-1 transition ${isSelected ? 'bg-blue-900/40 text-blue-200' : 'text-blue-400 hover:bg-gray-900'} disabled:cursor-default disabled:hover:bg-transparent`} title={reportMeta.fieldEvents?.length ? 'Clique para filtrar o mapa por este tempo' : 'Esta partida não tem ações marcadas no mapa'}>
+                                   {log}{reportMeta.fieldEvents?.length > 0 && <span className="ml-2 text-[10px] text-gray-500">{isSelected ? 'Mapa filtrado' : 'Filtrar mapa'}</span>}
                                  </button>;
                                })}
                              </div>
                           )}
                           <div className="bg-gray-950 p-3 rounded-lg border border-red-900/30">
-                            <h4 className="text-red-400 font-bold text-sm mb-2">🛡️ Ações do Adversário:</h4>
+                            <h4 className="text-red-400 font-bold text-sm mb-2">{isPositionMatch ? "Ações de " + (displayMeta.equipes?.[1] || displayMeta.awayTeam) : '🛡️ Ações do Adversário:'}</h4>
                             <div className="grid grid-cols-3 gap-2 text-center">
-                              <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Golos</span>{editingMatchId === partida.id ? <input type="number" min="0" value={editMatchData.dados._meta?.gols_sofridos ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, gols_sofridos: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.gols_sofridos ?? 0}</div>}</div>
-                              <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Finaliz.</span>{editingMatchId === partida.id ? <input type="number" min="0" value={editMatchData.dados._meta?.finalizacoes_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, finalizacoes_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.finalizacoes_adversario ?? 0}</div>}</div>
-                              <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Últ. Terço</span>{editingMatchId === partida.id ? <input type="number" min="0" value={editMatchData.dados._meta?.ultimo_terco_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, ultimo_terco_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{partida.dados._meta?.ultimo_terco_adversario ?? 0}</div>}</div>
+                              <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Golos</span>{editingMatchId === partida.id && !isPositionMatch ? <input type="number" min="0" value={editMatchData.dados._meta?.gols_sofridos ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, gols_sofridos: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{reportMeta?.gols_sofridos ?? 0}</div>}</div>
+                              <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Finaliz.</span>{editingMatchId === partida.id && !isPositionMatch ? <input type="number" min="0" value={editMatchData.dados._meta?.finalizacoes_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, finalizacoes_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{reportMeta?.finalizacoes_adversario ?? 0}</div>}</div>
+                              <div><span className="text-gray-500 text-[10px] uppercase block mb-1">Últ. Terço</span>{editingMatchId === partida.id && !isPositionMatch ? <input type="number" min="0" value={editMatchData.dados._meta?.ultimo_terco_adversario ?? 0} onChange={e => setEditMatchData({...editMatchData, dados: {...editMatchData.dados, _meta: {...editMatchData.dados._meta, ultimo_terco_adversario: parseInt(e.target.value)||0}}})} className="w-full p-1 text-center bg-gray-900 text-red-400 font-bold text-sm rounded border border-gray-700 outline-none" /> : <div className="text-red-400 font-mono text-lg font-bold">{reportMeta?.ultimo_terco_adversario ?? 0}</div>}</div>
                             </div>
                           </div>
                           {fieldEvents.length > 0 && <div className="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-3">
@@ -312,12 +399,12 @@ export default function AbaHistorico({
                                  <div className="flex justify-between items-center mb-2">
                                    <h4 className="text-gray-300 font-bold text-sm">⏱️ Linha do Tempo</h4>
                                    <span className="text-[10px] bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded font-mono font-bold">
-                                     {filteredLogs.length} {filteredLogs.length === 1 ? 'lance' : 'lances'}
+                                     {isPositionMatch ? filteredPositionEvents.length : filteredLogs.length} {(isPositionMatch ? filteredPositionEvents.length : filteredLogs.length) === 1 ? 'lance' : 'lances'}
                                    </span>
                                  </div>
 
                                  {/* FILTROS DE AÇÃO E ATLETA NA LINHA DO TEMPO */}
-                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 pb-2 border-b border-gray-800">
+                                 <div className={`grid grid-cols-1 ${isPositionMatch ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2 mb-3 pb-2 border-b border-gray-800`}>
                                    <select
                                      value={selectedAction}
                                      onChange={e => setTimelineActionFilter(prev => ({ ...prev, [partida.id]: e.target.value }))}
@@ -334,15 +421,42 @@ export default function AbaHistorico({
                                      onChange={e => setTimelinePlayerFilter(prev => ({ ...prev, [partida.id]: e.target.value }))}
                                      className="p-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 font-bold outline-none focus:border-blue-500"
                                    >
-                                     <option value="">Todos os Atletas</option>
-                                     {uniquePlayersInLogs.map(pl => (
+                                     <option value="">{isPositionMatch ? 'Todas as posições' : 'Todos os Atletas'}</option>
+                                     {isPositionMatch ? positionsInLogs.map(([id, label]) => <option key={id} value={id}>{label}</option>) : uniquePlayersInLogs.map(pl => (
                                        <option key={pl} value={pl}>{pl}</option>
                                      ))}
                                    </select>
+                                   {isPositionMatch && <select aria-label="Filtrar lances por equipe" value={selectedTeam} onChange={event => setTimelineTeamFilter(previous => ({ ...previous, [partida.id]: event.target.value }))} className="p-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 font-bold outline-none focus:border-blue-500">
+                                     <option value="">Todas as equipes</option>
+                                     <option value="home">{displayMeta.equipes?.[0] || displayMeta.homeTeam}</option>
+                                     <option value="away">{displayMeta.equipes?.[1] || displayMeta.awayTeam}</option>
+                                   </select>}
                                  </div>
 
                                  <div className="space-y-1.5 overflow-y-auto flex-1 pr-1">
-                                   {filteredLogs.length === 0 ? (
+                                   {isPositionMatch ? (filteredPositionEvents.length === 0 ? <p className="text-xs text-gray-600 text-center py-8">Nenhum lance encontrado para este filtro.</p> : filteredPositionEvents.map(event => editingThisMatch ? (
+                                     <div key={event.id} className="p-2 bg-gray-900 rounded border border-gray-800 space-y-2">
+                                       <div className="grid grid-cols-2 gap-2" aria-label="Equipe da ação">
+                                         {['home', 'away'].map((side, index) => <button key={side} type="button" aria-pressed={event.teamSide === side} onClick={() => updatePositionAction(event.id, { teamSide: side })} className={`rounded border p-2 text-xs font-bold ${event.teamSide === side ? 'border-blue-400 bg-blue-900/40 text-blue-200' : 'border-gray-700 text-gray-300'}`}>{displayMeta.equipes?.[index] || (side === 'home' ? displayMeta.homeTeam : displayMeta.awayTeam)}</button>)}
+                                       </div>
+                                       <div className="grid grid-cols-2 gap-2">
+                                         <select aria-label="Posição da ação" value={event.positionId} onChange={input => updatePositionAction(event.id, { positionId: input.target.value })} className="min-w-0 p-1.5 bg-gray-950 border border-gray-700 rounded text-xs text-gray-200">
+                                           <option value="">Selecione a posição</option>
+                                           {getFormationPositions(displayMeta.formations?.[event.teamSide]).map(position => <option key={position.id} value={position.id}>{position.label}</option>)}
+                                         </select>
+                                         <select aria-label="Tipo de ação" value={event.actionId} onChange={input => updatePositionAction(event.id, { actionId: input.target.value })} className="min-w-0 p-1.5 bg-gray-950 border border-gray-700 rounded text-xs text-blue-300">
+                                           {TODAS_ACOES.filter(action => positionActionIds.has(action.id)).map(action => <option key={action.id} value={action.id}>{action.nome}</option>)}
+                                         </select>
+                                         <select aria-label="Tempo da ação" value={event.period} onChange={input => updatePositionAction(event.id, { period: Number(input.target.value) })} className="p-1.5 bg-gray-950 border border-gray-700 rounded text-xs text-gray-300">
+                                           {[1, 2, 3, 4].map(period => <option key={period} value={period}>{period}º Tempo</option>)}
+                                         </select>
+                                         <input aria-label="Minuto da ação" type="text" value={event.time} onChange={input => { if (/^\d{0,2}(:\d{0,2})?$/.test(input.target.value)) updatePositionAction(event.id, { time: input.target.value }); }} placeholder="MM:SS" className="min-w-0 p-1.5 bg-gray-950 border border-gray-700 rounded text-xs font-mono text-gray-300" />
+                                       </div>
+                                       <button type="button" onClick={() => removePositionAction(event.id)} className="text-[10px] font-bold text-red-400 hover:text-red-300">Remover ação</button>
+                                     </div>
+                                   ) : <button key={event.id} type="button" onClick={() => handleTimelineClick(partida, formatPositionActionLog(event))} className="w-full text-left text-gray-300 text-xs border-l-2 border-blue-500 pl-2 py-1.5 bg-gray-900/60 hover:bg-blue-900/30 hover:text-white rounded-r">
+                                     {formatPositionActionLog(event)}{ytId && <span className="ml-2 text-[10px] text-blue-400">▶ Ver</span>}
+                                   </button>)) : filteredLogs.length === 0 ? (
                                      <p className="text-xs text-gray-600 text-center py-8">Nenhum lance encontrado para este filtro.</p>
                                    ) : (
                                      filteredLogs.map(({ log, index }) => {
@@ -386,7 +500,20 @@ export default function AbaHistorico({
                      </div>
                   )}
                   
-                  <div className="overflow-x-auto">
+                  {isPositionMatch ? <section className="space-y-3" aria-label="Estatísticas por equipe e posição">
+                    <div className="flex flex-wrap gap-3 text-sm text-gray-300">
+                      {['home', 'away'].map((side, index) => <div key={side} className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2">
+                        <span className="font-bold text-white">{displayMeta.equipes?.[index] || (side === 'home' ? displayMeta.homeTeam : displayMeta.awayTeam)}</span>
+                        <span className="ml-2 text-gray-400">{displayMeta.formations?.[side]} · {positionEvents.filter(event => event.teamSide === side).length} ações</span>
+                      </div>)}
+                    </div>
+                    {positionRows.length ? <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse min-w-max text-sm">
+                        <thead><tr className="border-b border-gray-800 text-gray-400"><th scope="col" className="p-2">Equipe</th><th scope="col" className="p-2">Posição</th>{positionActions.map(action => <th scope="col" key={action.id} className="p-2 text-center">{action.nome}</th>)}<th scope="col" className="p-2 text-center">Total</th></tr></thead>
+                        <tbody>{positionRows.map(row => <tr key={row.key} className="border-b border-gray-800/50 text-gray-300"><td className="p-2 font-bold">{row.teamName}</td><td className="p-2">{row.positionLabel}</td>{positionActions.map(action => <td key={action.id} className="p-2 text-center font-mono">{row.actions[action.id] || 0}</td>)}<td className="p-2 text-center font-mono font-bold text-blue-300">{row.total}</td></tr>)}</tbody>
+                      </table>
+                    </div> : <p className="text-sm text-gray-500">Nenhuma ação registrada nesta partida.</p>}
+                  </section> : <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-max">
                       <thead><tr className="border-b border-gray-800 text-gray-400 text-sm"><th className="p-2 sticky left-0 bg-gray-900 shadow-[1px_0_0_#1f2937] z-10">Atleta</th>{TODAS_ACOES.map(a => <th key={a.id} className="p-2 text-center" title={a.nome}>{a.nome.substring(0,4)}.</th>)}</tr></thead>
                       <tbody>
@@ -433,7 +560,7 @@ export default function AbaHistorico({
                         })}
                       </tbody>
                     </table>
-                  </div>
+                  </div>}
                 </div>
               )}
             </div>

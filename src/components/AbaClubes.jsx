@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import CampoFutebol from './CampoFutebol';
 import AbaRelatorios from './AbaRelatorios';
 import { getPlayerSectorLabel } from '../utils/playerSectors';
+import { getLiveTeamStats, getTeamGoalsConceded } from '../utils/matchTeams';
 
 const readShieldPhoto = file => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -27,6 +28,14 @@ const readShieldPhoto = file => new Promise((resolve, reject) => {
 });
 
 const EMPTY_TEAM_DETAILS = { country: '', division: '', categories: '', foundedYear: '', shieldPhoto: '' };
+const CLUB_ACTION_IDS = ['gols', 'assistencias', 'finalizacoes_certas', 'finalizacoes_erradas', 'desarmes', 'cruzamentos', 'cartoes_amarelos', 'cartoes_vermelhos'];
+const isEventFromTeam = (event, meta, teamName) => {
+  const side = event.teamSide === 'home' ? 0 : event.teamSide === 'away' ? 1 : -1;
+  return side >= 0
+    ? (meta.equipes?.[side] || (side === 0 ? meta.homeTeam : meta.awayTeam)) === teamName
+    : event.teamName === teamName;
+};
+const formatEventTime = seconds => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 
 export default function AbaClubes({ teams, teamMetadata = {}, players, matchHistory, newTeamName, setNewTeamName, handleAddTeam, handleUpdateTeam, handleDeleteTeam, competitions = [], competitionDetails = [], newCompetitionName, setNewCompetitionName, newCompetitionCategory, setNewCompetitionCategory, newCompetitionCountry, setNewCompetitionCountry, handleAddCompetition, handleDeleteCompetition, uniqueCompetitions, isDateInRange, TODAS_ACOES, ACOES_LINHA = [], ACOES_GOLEIRO = [], onSelectPlayer }) {
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -104,12 +113,14 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
     });
     const teamPlayerNames = new Set(teamPlayers.map(player => player.nome));
     const teamFieldEvents = teamMatches.flatMap(match => {
-      const fieldEvents = match.dados?._meta?.fieldEvents || [];
+      const meta = match.dados?._meta || {};
+      const fieldEvents = meta.fieldEvents || [];
       return fieldEvents
-        .filter(event => teamPlayerIds.includes(event.playerId))
+        .filter(event => meta.liveMode === 'positions' ? isEventFromTeam(event, meta, selectedTeam) : teamPlayerIds.includes(event.playerId))
         .map(event => ({
           ...event,
           id: `${match.id}-${event.id}`,
+          ...(meta.liveMode === 'positions' ? { teamName: selectedTeam } : {}),
           playerName: event.playerName || teamPlayers.find(player => player.id === event.playerId)?.nome,
           matchTitle: match.titulo
         }));
@@ -121,27 +132,34 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
     const clipsByAction = {};
     teamMatches.forEach(match => {
       const meta = match.dados?._meta || {};
-      (meta.eventLog || []).forEach((log, index) => {
-        const parts = log.match(/^\[T(\d+)\s*-\s*(\d{2}:\d{2})\]\s*(.*?)\s*•\s*(.+)$/);
-        if (!parts || !teamPlayerNames.has(parts[3].trim())) return;
-        const actionName = parts[4].trim();
-        const action = TODAS_ACOES.find(item => item.nome === actionName);
+      const clipEvents = meta.liveMode === 'positions'
+        ? (meta.liveActionEvents || []).filter(event => isEventFromTeam(event, meta, selectedTeam)).map(event => ({
+          id: event.id, action: TODAS_ACOES.find(item => item.id === event.actionId), period: Number(event.period),
+          time: event.time || formatEventTime(event.seconds || 0), seconds: Number(event.seconds) || 0,
+          subjectLabel: event.positionLabel || 'Posição não informada'
+        }))
+        : (meta.eventLog || []).flatMap((log, index) => {
+          const parts = log.match(/^\[T(\d+)\s*-\s*(\d{2}:\d{2})\]\s*(.*?)\s*•\s*(.+)$/);
+          if (!parts || !teamPlayerNames.has(parts[3].trim())) return [];
+          return [{ id: index, action: TODAS_ACOES.find(item => item.nome === parts[4].trim()), period: Number(parts[1]),
+            time: parts[2], seconds: parts[2].split(':').map(Number).reduce((total, value) => total * 60 + value, 0), subjectLabel: parts[3].trim() }];
+        });
+      clipEvents.forEach(event => {
+        const { action, period } = event;
         if (!action) return;
-        const period = Number(parts[1]);
-        const eventSeconds = parts[2].split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
         const offset = (period === 1 ? meta.offsetT1 : meta.offsetT2) || (period === 1 ? '00:00' : '45:00');
         const offsetSeconds = offset.split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
-        const startSecond = Math.max(0, offsetSeconds + eventSeconds - 10);
+        const startSecond = Math.max(0, offsetSeconds + event.seconds - 10);
         const matchUrl = meta.videoUrl || '';
         const videoIdMatch = matchUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|live\/))([\w-]{11})/);
         if (!videoIdMatch) return;
         const clip = {
-          id: `${match.id}-${index}`,
+          id: `${match.id}-${event.id}`,
           actionName: action.nome,
           matchTitle: match.titulo,
           matchDate: new Date(match.criado_em).toLocaleDateString(),
-          eventTime: `T${period} ${parts[2]}`,
-          playerName: parts[3].trim(),
+          eventTime: `T${period} ${event.time}`,
+          subjectLabel: event.subjectLabel,
           startSecond,
           endSecond: startSecond + 20,
           videoId: videoIdMatch?.[1] || null
@@ -153,13 +171,16 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
     const actionsWithVideo = Object.values(clipsByAction);
     const visibleActions = actionsWithVideo.filter(({ action }) => action.id === filterActionId);
     const totals = teamMatches.reduce((acc, match) => {
-      Object.entries(match.dados || {}).forEach(([playerId, stats]) => {
-        if (playerId === '_meta' || !teamPlayerIds.includes(playerId)) return;
-        ['gols', 'assistencias', 'finalizacoes_certas', 'finalizacoes_erradas', 'desarmes', 'cruzamentos', 'cartoes_amarelos', 'cartoes_vermelhos'].forEach(action => {
-          acc[action] += parseInt(stats[action], 10) || 0;
+      if (match.dados?._meta?.liveMode === 'positions') {
+        const stats = getLiveTeamStats(match.dados._meta, selectedTeam);
+        CLUB_ACTION_IDS.forEach(action => { acc[action] += Number(stats[action]) || 0; });
+      } else {
+        Object.entries(match.dados || {}).forEach(([playerId, stats]) => {
+          if (playerId === '_meta' || !teamPlayerIds.includes(playerId)) return;
+          CLUB_ACTION_IDS.forEach(action => { acc[action] += parseInt(stats[action], 10) || 0; });
         });
-      });
-      acc.gols_sofridos += parseInt(match.dados?._meta?.gols_sofridos, 10) || 0;
+      }
+      acc.gols_sofridos += getTeamGoalsConceded(match.dados?._meta, selectedTeam);
       return acc;
     }, { gols: 0, assistencias: 0, finalizacoes_certas: 0, finalizacoes_erradas: 0, desarmes: 0, cruzamentos: 0, cartoes_amarelos: 0, cartoes_vermelhos: 0, gols_sofridos: 0 });
 
@@ -246,7 +267,7 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
               {visibleTeamFieldEvents.length ? <div className="w-full max-w-[320px] mx-auto lg:mx-0"><CampoFutebol events={visibleTeamFieldEvents} title="" orientation="vertical" /></div> : <div className="aspect-[68/105] max-h-[520px] max-w-[320px] bg-gray-950 rounded-lg border border-gray-800 border-dashed flex items-center justify-center p-4 text-center text-sm text-gray-500">{teamFieldEvents.length ? 'Nenhuma ação encontrada para este filtro.' : 'Nenhuma ação de campo registrada para este clube nas partidas selecionadas.'}</div>}
             </div>
             <div className="lg:col-span-7">
-              <h3 className="text-sm font-bold text-gray-200 mb-3">Estatísticas do elenco</h3>
+              <h3 className="text-sm font-bold text-gray-200 mb-3">Estatísticas do clube</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[
                   ['Golos', totals.gols, 'text-blue-400'], ['Golos sofridos', totals.gols_sofridos, 'text-red-400'],
@@ -280,10 +301,10 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
             <div className="lg:col-span-8 space-y-2 lg:sticky lg:top-24">
               {activeClip?.videoId ? <>
                 <div className="flex items-start justify-between gap-3">
-                  <div><h3 className="font-bold text-white">{activeClip.actionName} · {activeClip.playerName}</h3><p className="text-xs text-gray-500 mt-1">{activeClip.matchTitle} · {activeClip.matchDate} · {activeClip.eventTime}</p></div>
+                  <div><h3 className="font-bold text-white">{activeClip.actionName} · {activeClip.subjectLabel}</h3><p className="text-xs text-gray-500 mt-1">{activeClip.matchTitle} · {activeClip.matchDate} · {activeClip.eventTime}</p></div>
                   <button type="button" onClick={() => setActiveClip(null)} className="shrink-0 text-xs text-gray-400 hover:text-white">Limpar ✕</button>
                 </div>
-                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-800"><iframe key={activeClip.id} className="w-full h-full" src={`https://www.youtube.com/embed/${activeClip.videoId}?start=${activeClip.startSecond}&end=${activeClip.endSecond}&autoplay=1&rel=0`} title={`Lance de ${activeClip.playerName}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
+                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-800"><iframe key={activeClip.id} className="w-full h-full" src={`https://www.youtube.com/embed/${activeClip.videoId}?start=${activeClip.startSecond}&end=${activeClip.endSecond}&autoplay=1&rel=0`} title={`Lance de ${activeClip.subjectLabel}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>
               </> : <div className="aspect-video bg-gray-950 rounded-lg border border-gray-800 border-dashed flex flex-col items-center justify-center text-center p-6"><span className="text-4xl mb-3">▶</span><p className="font-bold text-gray-300">Selecione um lance na lista</p><p className="text-xs text-gray-500 mt-1">O vídeo será reproduzido aqui.</p></div>}
             </div>
 
@@ -296,7 +317,7 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
                   </button>
                   {expandedAction === action.id && <div className="p-2 space-y-2 bg-gray-950/60">
                     {clips.map(clip => <button key={clip.id} type="button" disabled={!clip.videoId} onClick={() => setActiveClip(clip)} className={`w-full text-left p-3 rounded-lg border transition ${activeClip?.id === clip.id ? 'border-blue-500 bg-blue-950/40' : 'border-gray-800 bg-gray-950 hover:border-gray-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>
-                      <span className="block text-sm font-bold text-gray-200">{clip.playerName}</span><span className="block text-xs text-gray-500 mt-1">{clip.matchTitle}</span><span className="block text-[10px] text-gray-500 mt-1">{clip.matchDate} · {clip.eventTime}</span>
+                      <span className="block text-sm font-bold text-gray-200">{clip.subjectLabel}</span><span className="block text-xs text-gray-500 mt-1">{clip.matchTitle}</span><span className="block text-[10px] text-gray-500 mt-1">{clip.matchDate} · {clip.eventTime}</span>
                     </button>)}
                   </div>}
                 </div>
@@ -479,34 +500,33 @@ export default function AbaClubes({ teams, teamMetadata = {}, players, matchHist
                   });
 
                   const teamPlayerIds = players.filter(p => p.time_nome === team).map(p => p.id);
-                  let tGolos = 0, tAssist = 0, tFinCertas = 0, tFinErradas = 0, tDes = 0, tCruz = 0, tCA = 0, tCV = 0;
+                  const teamTotals = Object.fromEntries(CLUB_ACTION_IDS.map(action => [action, 0]));
+                  const addTeamStats = stats => CLUB_ACTION_IDS.forEach(action => { teamTotals[action] += Number(stats?.[action]) || 0; });
                   
                   if (filterCompetition || startDate || endDate) {
                      teamMatches.forEach(m => {
+                       if (m.dados?._meta?.liveMode === 'positions') {
+                         addTeamStats(getLiveTeamStats(m.dados._meta, team));
+                         return;
+                       }
                        Object.keys(m.dados).forEach(pId => {
                          if (pId !== '_meta' && teamPlayerIds.includes(pId)) {
-                           const st = m.dados[pId];
-                           tGolos += parseInt(st.gols || 0); tAssist += parseInt(st.assistencias || 0);
-                           tFinCertas += parseInt(st.finalizacoes_certas || 0); tFinErradas += parseInt(st.finalizacoes_erradas || 0);
-                           tDes += parseInt(st.desarmes || 0); tCruz += parseInt(st.cruzamentos || 0);
-                           tCA += parseInt(st.cartoes_amarelos || 0); tCV += parseInt(st.cartoes_vermelhos || 0);
+                           addTeamStats(m.dados[pId]);
                          }
                        });
                      });
                   } else {
                      const teamPlayers = players.filter(p => p.time_nome === team);
-                     tGolos = teamPlayers.reduce((sum, p) => sum + (p.acoes.gols || 0), 0);
-                     tAssist = teamPlayers.reduce((sum, p) => sum + (p.acoes.assistencias || 0), 0);
-                     tFinCertas = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes_certas || 0), 0);
-                     tFinErradas = teamPlayers.reduce((sum, p) => sum + (p.acoes.finalizacoes_erradas || 0), 0);
-                     tDes = teamPlayers.reduce((sum, p) => sum + (p.acoes.desarmes || 0), 0);
-                     tCruz = teamPlayers.reduce((sum, p) => sum + (p.acoes.cruzamentos || 0), 0);
-                     tCA = teamPlayers.reduce((sum, p) => sum + (p.acoes.cartoes_amarelos || 0), 0);
-                     tCV = teamPlayers.reduce((sum, p) => sum + (p.acoes.cartoes_vermelhos || 0), 0);
+                     teamPlayers.forEach(player => addTeamStats(player.acoes));
+                     teamMatches.filter(match => match.dados?._meta?.liveMode === 'positions')
+                       .forEach(match => addTeamStats(getLiveTeamStats(match.dados._meta, team)));
                   }
+                  const { gols: tGolos, assistencias: tAssist, finalizacoes_certas: tFinCertas,
+                    finalizacoes_erradas: tFinErradas, desarmes: tDes, cruzamentos: tCruz,
+                    cartoes_amarelos: tCA, cartoes_vermelhos: tCV } = teamTotals;
                   
                   const tPartidas = teamMatches.length;
-                  const tSofridos = teamMatches.reduce((sum, m) => sum + (m.dados?._meta?.gols_sofridos || 0), 0);
+                  const tSofridos = teamMatches.reduce((sum, m) => sum + getTeamGoalsConceded(m.dados?._meta, team), 0);
 
                   return (
                     <tr key={team} className="border-b border-gray-800/50 hover:bg-gray-800/20 text-sm">

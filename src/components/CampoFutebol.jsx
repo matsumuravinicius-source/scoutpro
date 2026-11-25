@@ -1,18 +1,7 @@
 import React from 'react';
+import { FIELD_ACTION_COLORS } from '../utils/fieldActionColors';
 
-export const CORES_ACAO_CAMPO = {
-  finalizacoes_erradas: '#ef4444',
-  finalizacoes_certas: '#22c55e',
-  gols: '#3b82f6',
-  desarmes: '#a78bfa',
-  duelos_aereos: '#f472b6',
-  bloqueios: '#06b6d4',
-  perdas_posse: '#f97316',
-  erro_passe: '#e879f9',
-  faltas_cometidas: '#facc15',
-  adversario_finalizacao: '#eab308',
-  adversario_gol: '#f97316'
-};
+export const CORES_ACAO_CAMPO = FIELD_ACTION_COLORS;
 
 export default function CampoFutebol({ events = [], onSelectPoint, title = 'Mapa de ações', orientation = 'horizontal' }) {
   const interactive = Boolean(onSelectPoint);
@@ -52,7 +41,7 @@ export default function CampoFutebol({ events = [], onSelectPoint, title = 'Mapa
         <path d="M0.5,1.5 Q2.5,1.5 2.5,0.5 M102.5,0.5 Q102.5,1.5 104.5,1.5 M0.5,66.5 Q2.5,66.5 2.5,67.5 M102.5,67.5 Q102.5,66.5 104.5,66.5" fill="none" stroke="white" strokeWidth="0.5" />
         {events.map((point, index) => <g key={point.id || index}>
           <circle cx={point.x} cy={point.y} r="1.35" fill={point.color || CORES_ACAO_CAMPO[point.actionId] || '#fff'} stroke="white" strokeWidth="0.35" />
-          {!interactive && <title>{`${point.playerName || 'Adversário'} · ${point.label || point.actionId}`}</title>}
+          {!interactive && <title>{`${point.positionLabel ? [point.teamName, point.positionLabel].filter(Boolean).join(' · ') : point.playerName || 'Adversário'} · ${point.label || point.actionId}`}</title>}
         </g>)}
         </g>
       </svg>
