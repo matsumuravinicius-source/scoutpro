@@ -1,0 +1,6 @@
+O progresso da IA está arquivado e verificado em:
+D:\ScoutPro\IA
+
+Todos os arquivos das quatro pastas de IA foram transferidos para o HD.
+Pastas vazias eventualmente abertas por outro processo não ocupam os dados da IA.
+Para retomar: D:\ScoutPro\IA\LEIA-ME.txt

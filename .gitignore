@@ -30,3 +30,11 @@ ai_pipeline/videos/
 ai_pipeline/data/
 __pycache__/
 *.py[cod]
+.venv-tracking/
+
+# Contained third-party detector evaluation, not a production dependency
+outputs/footandball_eval/
+
+# Local reviewed attribution examples and their private source references
+outputs/attribution_cohort/
+outputs/attribution_cohort_j014*/
